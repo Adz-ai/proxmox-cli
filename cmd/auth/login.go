@@ -1,4 +1,4 @@
-package cmd
+package auth
 
 import (
 	"context"
@@ -11,11 +11,11 @@ import (
 	"strings"
 )
 
-var authCmd = &cobra.Command{
-	Use:   "auth",
+// viewCmd represents the view subcommand
+var loginCmd = &cobra.Command{
+	Use:   "login",
 	Short: "Authenticate with Proxmox and retrieve an auth cookie",
-	Long: `Authenticate with Proxmox by providing a username and password,
-and retrieve an authentication cookie to use for subsequent API requests.`,
+	Long:  `Authenticate with Proxmox by providing a username and password, and retrieve an authentication cookie to use for subsequent API requests.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		username, _ := cmd.Flags().GetString("username")
 		password := getPassword()
@@ -31,14 +31,12 @@ and retrieve an authentication cookie to use for subsequent API requests.`,
 }
 
 func init() {
-	rootCmd.AddCommand(authCmd)
-
-	// Adding command line flags
-	authCmd.Flags().StringP("username", "u", "", "Username for Proxmox (required)")
-	err := authCmd.MarkFlagRequired("username")
+	loginCmd.Flags().StringP("username", "u", "", "Username for Proxmox (required)")
+	err := loginCmd.MarkFlagRequired("username")
 	if err != nil {
 		return
 	}
+	Cmd.AddCommand(loginCmd)
 }
 
 func getPassword() string {

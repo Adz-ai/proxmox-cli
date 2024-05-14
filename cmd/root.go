@@ -11,6 +11,9 @@ import (
 	"github.com/spf13/viper"
 	"os"
 	"path/filepath"
+	"proxmox-cli/cmd/auth"
+	"proxmox-cli/cmd/nodes"
+	"proxmox-cli/cmd/vm"
 	"runtime"
 	"strings"
 )
@@ -31,6 +34,9 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	rootCmd.AddCommand(nodes.Cmd)
+	rootCmd.AddCommand(auth.Cmd)
+	rootCmd.AddCommand(vm.Cmd)
 }
 
 func initConfig() {

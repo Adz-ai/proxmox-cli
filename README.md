@@ -13,7 +13,7 @@ Proxmox CLI is a command-line interface for managing Proxmox Virtual Environment
 1. **Clone the repository**:
 
     ```sh
-    git clone https://github.com/yourusername/proxmox-cli.git
+    git clone https://github.com/Adz-ai/proxmox-cli.git
     cd proxmox-cli
     ```
 

@@ -1,32 +1,27 @@
 /*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
+Copyright © 2024 Adarssh Athithan
 */
 package cmd
 
 import (
-	"os"
-	"proxmox-cli/cmd/nodes"
-
+	"bufio"
+	"errors"
+	"fmt"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "proxmox-cli",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Short: "proxmox-cli is a CLI for Proxmox management",
+	Long:  `proxmox-cli is a Command Line Interface built using Cobra for managing Proxmox servers.`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -34,19 +29,50 @@ func Execute() {
 	}
 }
 
-func addSubcommandPalettes() {
-	rootCmd.AddCommand(nodes.NodesCmd)
+func init() {
+	cobra.OnInitialize(initConfig)
 }
 
-func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+func initConfig() {
+	var homeDir string
+	if runtime.GOOS == "windows" {
+		homeDir = os.Getenv("HOMEPATH")
+	} else {
+		homeDir = os.Getenv("HOME")
+	}
+	configPath := filepath.Join(homeDir, ".proxmox-cli")
+	configName := "config"
+	configType := "json"
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.proxmox-cli.yaml)")
+	viper.AddConfigPath(configPath)
+	viper.SetConfigName(configName)
+	viper.SetConfigType(configType)
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	addSubcommandPalettes()
+	// Attempt to read the config, if it doesn't exist, create it with default settings
+	if err := viper.ReadInConfig(); err != nil {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
+			// The Config file does not exist; create it with some default values
+			err := os.MkdirAll(configPath, os.ModePerm)
+			if err != nil {
+				return
+			}
+			setupInitialConfig()
+			err = viper.SafeWriteConfig()
+			if err != nil {
+				return
+			}
+		}
+	}
+}
+
+func setupInitialConfig() {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter Proxmox server URL: ")
+	serverURL, _ := reader.ReadString('\n')
+	serverURL = strings.TrimSpace(serverURL)
+
+	// Store the server URL in the configuration file
+	viper.Set("server_url", serverURL)
+	fmt.Println("Configuration saved. You can now use the CLI.")
 }

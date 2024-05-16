@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/viper"
 	"log"
 	"proxmox-cli/cmd/utility"
-	"time"
 )
 
 var getCmd = &cobra.Command{
@@ -48,12 +47,7 @@ func viewVMs() {
 			log.Fatalf("Error fetching VMs for node %s: %v", node.Node, err)
 		}
 		for _, vm := range vms {
-			uptime := time.Duration(vm.Uptime) * time.Second
-			days := int(uptime.Hours() / 24)
-			hours := int(uptime.Hours()) % 24
-			minutes := int(uptime.Minutes()) % 60
-			seconds := int(uptime.Seconds()) % 60
-			fmt.Printf("VM: %s\n ID: %d\n Status: %s\n Uptime: %d days, %d hours, %d minutes, %d seconds\n", vm.Name, vm.VMID, vm.Status, days, hours, minutes, seconds)
+			fmt.Printf("VM: %s\n ID: %d\n Status: %s\n Uptime: "+formatUptime(vm.Uptime)+"\n", vm.Name, vm.VMID, vm.Status)
 		}
 	}
 

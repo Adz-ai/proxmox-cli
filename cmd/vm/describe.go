@@ -61,13 +61,22 @@ func describeVirtualMachine(node string, vmID int) error {
 }
 
 func printVMAttributes(vm *proxmox.VirtualMachine) {
+	var vmConfigField reflect.StructField
+	var vmConfigValue reflect.Value
 	v := reflect.ValueOf(vm).Elem()
 	t := v.Type()
 	fmt.Println("VM Details:")
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
 		value := v.Field(i)
-		if field.Name == "client" || field.Name == "VirtualMachineConfig" {
+
+		if field.Name == "client" {
+			continue
+		}
+
+		if field.Name == "VirtualMachineConfig" {
+			vmConfigField = field
+			vmConfigValue = value
 			continue
 		}
 
@@ -75,6 +84,24 @@ func printVMAttributes(vm *proxmox.VirtualMachine) {
 			fmt.Printf("%s: %s\n", field.Name, formatUptime(value.Uint()))
 		} else {
 			fmt.Printf("%s: %v\n", field.Name, value.Interface())
+		}
+	}
+	// Print VirtualMachineConfig at the end
+	if !vmConfigValue.IsNil() {
+		fmt.Printf("%s:\n", vmConfigField.Name)
+
+		for i := 0; i < vmConfigValue.Elem().NumField(); i++ {
+			field := vmConfigValue.Elem().Type().Field(i)
+			fieldValue := vmConfigValue.Elem().Field(i)
+
+			// Skip empty strings, maps, and slices
+			if (field.Type.Kind() == reflect.String && fieldValue.String() == "") ||
+				(field.Type.Kind() == reflect.Map && fieldValue.Len() == 0) ||
+				(field.Type.Kind() == reflect.Slice && fieldValue.Len() == 0) {
+				continue
+			}
+
+			fmt.Printf("    %s: %+v\n", field.Name, fieldValue.Interface())
 		}
 	}
 }

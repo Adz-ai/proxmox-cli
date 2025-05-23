@@ -8,6 +8,10 @@ out/
 build/
 dist/
 proxmox-cli
+
+# Test coverage files
+coverage.out
+coverage.html
 *.exe
 *.exe~
 *.dll

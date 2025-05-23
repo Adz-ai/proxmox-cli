@@ -31,7 +31,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	Cmd.AddCommand(deleteCmd)
+	VMCmd.AddCommand(deleteCmd)
 }
 
 func deleteVm(node string, id int) {

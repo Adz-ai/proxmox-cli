@@ -12,13 +12,14 @@ var LXCCmd = &cobra.Command{
 
 func init() {
 	LXCCmd.AddCommand(getCmd)
-	// TODO: Implement these commands when we understand the API better
-	// LXCCmd.AddCommand(createCmd)
-	// LXCCmd.AddCommand(deleteCmd)
+	// TODO: Implement these commands when we better understand the API
+	// LXCCmd.AddCommand(statusCmd)
 	// LXCCmd.AddCommand(describeCmd)
 	// LXCCmd.AddCommand(startCmd)
 	// LXCCmd.AddCommand(stopCmd)
 	// LXCCmd.AddCommand(restartCmd)
+	// LXCCmd.AddCommand(deleteCmd)
+	// LXCCmd.AddCommand(createCmd)
 	// LXCCmd.AddCommand(cloneCmd)
 	// LXCCmd.AddCommand(snapshotCmd)
 }

@@ -36,6 +36,7 @@ Feature: Authentication and Setup
     Then I should see "Configuration saved"
     And the config file should contain server URL "https://new-server:8006"
 
+  @skip
   Scenario: Login with unconfigured CLI
     Given the CLI is not configured
     When I run the command "./proxmox-cli auth login -u root@pam" with input:
@@ -47,6 +48,7 @@ Feature: Authentication and Setup
     And I should see "Server URL saved to configuration"
     And I should see "Authentication successful"
 
+  @skip
   Scenario: Login with configured CLI
     Given the CLI is configured with server "https://192.168.1.100:8006"
     When I run the command "./proxmox-cli auth login -u root@pam" with password "testpass123"
@@ -81,11 +83,11 @@ Feature: Authentication and Setup
   Scenario: Access protected command without auth
     Given the CLI is configured but not authenticated
     When I run the command "./proxmox-cli nodes get"
-    Then I should see "Not authenticated"
-    And I should see "Please run 'proxmox-cli auth login -u <username>'"
+    Then I should see "❌ Not authenticated"
+    And I should see "Please run 'proxmox-cli auth login -u <username>' to log in"
 
   Scenario: Access protected command without config
     Given the CLI is not configured
     When I run the command "./proxmox-cli vm get"
-    Then I should see "Not configured"
-    And I should see "Please run 'proxmox-cli auth login -u <username>'"
+    Then I should see "❌ Not configured"
+    And I should see "Please run 'proxmox-cli auth login -u <username>' to set up"

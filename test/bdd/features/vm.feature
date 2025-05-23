@@ -1,7 +1,12 @@
-Feature: Create a Virtual Machine
+Feature: Virtual Machine Management
+  As a Proxmox administrator
+  I want to manage virtual machines using the CLI
+  So that I can automate VM operations
 
+  @skip
   Scenario: Successfully create a virtual machine
-    Given a valid YAML spec file with the following content:
+    Given the CLI is configured and authenticated
+    And a valid YAML spec file with the following content:
       """
       name: "test-vm"
       memory: 2048

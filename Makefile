@@ -29,7 +29,9 @@ clean: ## Remove build artifacts
 # Run all tests
 .PHONY: test
 test: ## Run all tests (unit + BDD)
-	@echo "🧪 Running all tests..."
+	@echo "🧪 Running unit tests..."
+	go test -v -short ./cmd/...
+	@echo "🧪 Running BDD integration tests..."
 	go test -v ./...
 	@echo "✅ All tests completed"
 
@@ -40,18 +42,18 @@ test-bdd: ## Run BDD/Gherkin tests
 	go test -v -tags=bdd ./...
 	@echo "✅ BDD tests completed"
 
-# Run unit tests only
+# Run unit tests only (excluding BDD tests)
 .PHONY: test-unit
 test-unit: ## Run unit tests only
 	@echo "🔬 Running unit tests..."
-	go test -v -short ./...
+	go test -v -short ./cmd/...
 	@echo "✅ Unit tests completed"
 
-# Run tests with coverage
+# Run tests with coverage (unit tests only for meaningful coverage)
 .PHONY: test-coverage
-test-coverage: ## Run tests with coverage report
-	@echo "📊 Running tests with coverage..."
-	go test -v -coverprofile=coverage.out ./...
+test-coverage: ## Run unit tests with coverage report
+	@echo "📊 Running unit tests with coverage..."
+	go test -v -coverprofile=coverage.out -short ./cmd/...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "✅ Coverage report generated: coverage.html"
 

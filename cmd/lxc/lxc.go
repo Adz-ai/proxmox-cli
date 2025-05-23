@@ -4,22 +4,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var LXCCmd = &cobra.Command{
+var Cmd = &cobra.Command{
 	Use:   "lxc",
 	Short: "Manage LXC containers",
 	Long:  `Perform operations on LXC containers including create, delete, start, stop, and more.`,
 }
 
 func init() {
-	LXCCmd.AddCommand(getCmd)
+	Cmd.AddCommand(getCmd)
+	Cmd.AddCommand(createCmd)
+	Cmd.AddCommand(startCmd)
+	Cmd.AddCommand(stopCmd)
+	Cmd.AddCommand(deleteCmd)
 	// TODO: Implement these commands when we better understand the API
-	// LXCCmd.AddCommand(statusCmd)
-	// LXCCmd.AddCommand(describeCmd)
-	// LXCCmd.AddCommand(startCmd)
-	// LXCCmd.AddCommand(stopCmd)
-	// LXCCmd.AddCommand(restartCmd)
-	// LXCCmd.AddCommand(deleteCmd)
-	// LXCCmd.AddCommand(createCmd)
-	// LXCCmd.AddCommand(cloneCmd)
-	// LXCCmd.AddCommand(snapshotCmd)
+	// Cmd.AddCommand(statusCmd)
+	// Cmd.AddCommand(describeCmd)
+	// Cmd.AddCommand(restartCmd)
+	// Cmd.AddCommand(cloneCmd)
+	// Cmd.AddCommand(snapshotCmd)
 }

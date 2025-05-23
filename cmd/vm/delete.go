@@ -3,20 +3,27 @@ package vm
 import (
 	"context"
 	"fmt"
-	"github.com/luthermonson/go-proxmox"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"log"
 	"proxmox-cli/cmd/utility"
+
+	"github.com/spf13/cobra"
 )
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "delete virtual machine",
 	Run: func(cmd *cobra.Command, args []string) {
+		out := cmd.OutOrStdout()
 		node, _ := cmd.Flags().GetString("node")
 		id, _ := cmd.Flags().GetInt("id")
-		deleteVm(node, id)
+		
+		err := deleteVm(node, id)
+		if err != nil {
+			fmt.Fprintf(out, "Error deleting VM: %v\n", err)
+			return
+		}
+		
+		fmt.Fprintf(out, "VM %d deleted successfully\n", id)
 	},
 }
 
@@ -31,40 +38,39 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	VMCmd.AddCommand(deleteCmd)
 }
 
-func deleteVm(node string, id int) {
-	utility.CheckIfAuthPresent()
+func deleteVm(node string, id int) error {
+	err := utility.CheckIfAuthPresent()
+	if err != nil {
+		return err
+	}
 
-	client := proxmox.NewClient(fmt.Sprintf("%s/api2/json", viper.GetString("server_url")),
-		proxmox.WithSession(viper.Sub("auth_ticket").GetString("ticket"), viper.Sub("auth_ticket").GetString("CSRFPreventionToken")),
-	)
+	client := utility.GetClient()
 
 	retrievedNode, err := client.Node(context.Background(), node)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	vmToDelete, err := retrievedNode.VirtualMachine(context.Background(), id)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	task, err := vmToDelete.Delete(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	err = task.WaitFor(context.Background(), 5)
 	if err != nil {
-		return
+		return err
 	}
 
 	if !task.IsSuccessful {
-		log.Fatal("VM delete failed")
+		return fmt.Errorf("VM delete failed")
 	}
 
-	fmt.Printf("VM %s deleted successfully\n", vmToDelete.Name)
-
+	return nil
 }

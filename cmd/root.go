@@ -1,12 +1,7 @@
-/*
-Copyright © 2024 Adarssh Athithan
-*/
 package cmd
 
 import (
 	"errors"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"os"
 	"path/filepath"
 	"proxmox-cli/cmd/auth"
@@ -14,6 +9,9 @@ import (
 	"proxmox-cli/cmd/nodes"
 	"proxmox-cli/cmd/vm"
 	"runtime"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -41,12 +39,31 @@ func Execute() {
 	}
 }
 
+// NewRootCmd creates a new root command for testing
+func NewRootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "proxmox-cli",
+		Short: "Command-line interface for Proxmox VE",
+		Long: rootCmd.Long,
+	}
+	
+	// Add all subcommands
+	cmd.AddCommand(initCmd)
+	cmd.AddCommand(statusCmd)
+	cmd.AddCommand(nodes.Cmd)
+	cmd.AddCommand(auth.Cmd)
+	cmd.AddCommand(vm.Cmd)
+	cmd.AddCommand(lxc.Cmd)
+	
+	return cmd
+}
+
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(nodes.Cmd)
-	rootCmd.AddCommand(auth.AuthCmd)
-	rootCmd.AddCommand(vm.VMCmd)
-	rootCmd.AddCommand(lxc.LXCCmd)
+	rootCmd.AddCommand(auth.Cmd)
+	rootCmd.AddCommand(vm.Cmd)
+	rootCmd.AddCommand(lxc.Cmd)
 }
 
 func initConfig() {
@@ -64,16 +81,16 @@ func initConfig() {
 	viper.SetConfigName(configName)
 	viper.SetConfigType(configType)
 
-	// Attempt to read the config, if it doesn't exist, create empty config file
+	// Attempt to read the config, if it doesn't exist, create an empty config file
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
-			// The Config file does not exist; create empty one
+			// The Config file does not exist; create an empty one
 			err := os.MkdirAll(configPath, os.ModePerm)
 			if err != nil {
 				return
 			}
-			// Create empty config file without prompting
+			// Create an empty config file without prompting
 			err = viper.SafeWriteConfig()
 			if err != nil {
 				return
@@ -81,4 +98,3 @@ func initConfig() {
 		}
 	}
 }
-

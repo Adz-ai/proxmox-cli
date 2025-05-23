@@ -5,13 +5,15 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
-	"net/http"
-	"os"
-	"strings"
 )
 
 // viewCmd represents the view subcommand
@@ -20,16 +22,18 @@ var loginCmd = &cobra.Command{
 	Short: "Authenticate with Proxmox and retrieve an auth cookie",
 	Long:  `Authenticate with Proxmox by providing a username and password, and retrieve an authentication cookie to use for subsequent API requests.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		out := cmd.OutOrStdout()
+		
 		username, _ := cmd.Flags().GetString("username")
-		password := getPassword()
+		password := getPassword(cmd)
 
 		// Call function to handle authentication
 		if username == "" || password == "" {
-			fmt.Println("Both username and password are required.")
+			fmt.Fprintln(out, "Both username and password are required.")
 			return
 		}
 
-		authenticateWithProxmox(username, password)
+		authenticateWithProxmox(cmd, username, password)
 	},
 }
 
@@ -41,27 +45,51 @@ func init() {
 	}
 }
 
-func getPassword() string {
-	fmt.Print("Enter Password: ")
-	bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		fmt.Println("\nFailed to read password")
-		return ""
+func getPassword(cmd *cobra.Command) string {
+	out := cmd.OutOrStdout()
+	in := cmd.InOrStdin()
+	
+	// Check if stdin is a terminal
+	if file, ok := in.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+		fmt.Fprint(out, "Enter Password: ")
+		bytePassword, err := term.ReadPassword(int(file.Fd()))
+		if err != nil {
+			fmt.Fprintln(out, "\nFailed to read password")
+			return ""
+		}
+		fmt.Fprintln(out) // It's common to output a newline after reading a password
+		return strings.TrimSpace(string(bytePassword))
+	} else {
+		// For non-terminal input (like in tests), read from stdin
+		reader := bufio.NewReader(in)
+		password, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			fmt.Fprintf(out, "Failed to read password: %v\n", err)
+			return ""
+		}
+		return strings.TrimSpace(password)
 	}
-	fmt.Println() // It's common to output a newline after reading a password
-	return strings.TrimSpace(string(bytePassword))
 }
 
-func authenticateWithProxmox(username, password string) {
+func authenticateWithProxmox(cmd *cobra.Command, username, password string) {
+	out := cmd.OutOrStdout()
+	in := cmd.InOrStdin()
+	
 	// Ensure the server URL is configured
 	serverURL := viper.GetString("server_url")
 	serverURL = strings.TrimSpace(serverURL)
 	if serverURL == "" {
-		// Prompt for server URL if not configured
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Println("🔧 Proxmox server URL not configured.")
-		fmt.Print("Enter Proxmox server URL (e.g., https://192.168.1.100:8006): ")
-		serverURL, _ = reader.ReadString('\n')
+		// Prompt for server URL if is not configured
+		reader := bufio.NewReader(in)
+		fmt.Fprintln(out, "🔧 Proxmox server URL not configured.")
+		fmt.Fprint(out, "Enter Proxmox server URL (e.g., https://192.168.1.100:8006): ")
+		
+		var err error
+		serverURL, err = reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			fmt.Fprintf(out, "❌ Error reading server URL: %s\n", err)
+			return
+		}
 		serverURL = strings.TrimSpace(serverURL)
 
 		// Ensure URL has protocol
@@ -69,23 +97,23 @@ func authenticateWithProxmox(username, password string) {
 			serverURL = "https://" + serverURL
 		}
 
-		// Remove /api2/json if user included it
+		// Remove /api2/json if the user included it
 		serverURL = strings.TrimSuffix(serverURL, "/api2/json")
 		serverURL = strings.TrimSuffix(serverURL, "/")
 
 		// Save the URL
 		viper.Set("server_url", serverURL)
-		err := viper.WriteConfig()
+		err = viper.WriteConfig()
 		if err != nil {
-			fmt.Printf("❌ Failed to save configuration: %s\n", err)
+			fmt.Fprintf(out, "❌ Failed to save configuration: %s\n", err)
 			return
 		}
-		fmt.Println("✅ Server URL saved to configuration")
-		fmt.Println()
+		fmt.Fprintln(out, "✅ Server URL saved to configuration")
+		fmt.Fprintln(out)
 	}
 
 	// Show which server we're connecting to
-	fmt.Printf("🔐 Authenticating with Proxmox server at %s...\n", serverURL)
+	fmt.Fprintf(out, "🔐 Authenticating with Proxmox server at %s...\n", serverURL)
 
 	// Configure HTTP client with TLS settings
 	httpClient := &http.Client{
@@ -109,33 +137,33 @@ func authenticateWithProxmox(username, password string) {
 	// Get the version to test connection
 	version, err := client.Version(context.Background())
 	if err != nil {
-		fmt.Printf("❌ Failed to authenticate: %s\n", err)
-		fmt.Println("\n💡 Common issues:")
-		fmt.Println("  - Check username format (e.g., root@pam, user@pve)")
-		fmt.Println("  - Verify the server URL is correct")
-		fmt.Println("  - Ensure your password is correct")
-		fmt.Println("  - Check if the Proxmox server is accessible")
+		fmt.Fprintf(out, "❌ Failed to authenticate: %s\n", err)
+		fmt.Fprintln(out, "\n💡 Common issues:")
+		fmt.Fprintln(out, "  - Check username format (e.g., root@pam, user@pve)")
+		fmt.Fprintln(out, "  - Verify the server URL is correct")
+		fmt.Fprintln(out, "  - Ensure your password is correct")
+		fmt.Fprintln(out, "  - Check if the Proxmox server is accessible")
 		return
 	}
 
 	// Get and store the ticket and CSRF token
 	ticket, err := client.Ticket(context.Background(), &credentials)
 	if err != nil {
-		fmt.Printf("❌ Failed to get authentication ticket: %s\n", err)
+		fmt.Fprintf(out, "❌ Failed to get authentication ticket: %s\n", err)
 		return
 	}
 
 	viper.Set("auth_ticket", ticket)
 	err = viper.WriteConfig()
 	if err != nil {
-		fmt.Printf("❌ Failed to save authentication: %s\n", err)
+		fmt.Fprintf(out, "❌ Failed to save authentication: %s\n", err)
 		return
 	}
 
-	fmt.Printf("✅ Authentication successful!\n")
-	fmt.Printf("📊 Connected to Proxmox VE %s\n", version.Version)
-	fmt.Println("\n🎯 You can now use commands like:")
-	fmt.Println("  - proxmox-cli nodes get")
-	fmt.Println("  - proxmox-cli vm get")
-	fmt.Println("  - proxmox-cli lxc get")
+	fmt.Fprintln(out, "✅ Authentication successful!")
+	fmt.Fprintf(out, "📊 Connected to Proxmox VE %s\n", version.Version)
+	fmt.Fprintln(out, "\n🎯 You can now use commands like:")
+	fmt.Fprintln(out, "  - proxmox-cli nodes get")
+	fmt.Fprintln(out, "  - proxmox-cli vm get")
+	fmt.Fprintln(out, "  - proxmox-cli lxc get")
 }

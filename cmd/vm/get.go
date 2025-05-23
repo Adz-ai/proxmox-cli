@@ -3,52 +3,74 @@ package vm
 import (
 	"context"
 	"fmt"
-	"github.com/luthermonson/go-proxmox"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"log"
 	"proxmox-cli/cmd/utility"
+
+	"github.com/spf13/cobra"
 )
 
 var getCmd = &cobra.Command{
 	Use:   "get",
-	Short: "Get virtual machines",
+	Short: "List all virtual machines",
+	Long:  `Display a list of all virtual machines across all nodes in the Proxmox cluster.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		viewVMs()
+		out := cmd.OutOrStdout()
+		
+		err := utility.CheckIfAuthPresent()
+		if err != nil {
+			fmt.Fprintln(out, err)
+			return
+		}
+
+		client := utility.GetClient()
+		ctx := context.Background()
+
+		nodes, err := client.Nodes(ctx)
+		if err != nil {
+			fmt.Fprintf(out, "Error fetching nodes: %v\n", err)
+			return
+		}
+
+		fmt.Fprintln(out, "Virtual Machines:")
+		fmt.Fprintln(out, "=================")
+
+		totalVMs := 0
+		for _, nodeStatus := range nodes {
+			node, err := client.Node(ctx, nodeStatus.Node)
+			if err != nil {
+				fmt.Fprintf(out, "Error getting node %s: %v\n", nodeStatus.Node, err)
+				continue
+			}
+
+			vms, err := node.VirtualMachines(ctx)
+			if err != nil {
+				fmt.Fprintf(out, "Error fetching VMs from node %s: %v\n", nodeStatus.Node, err)
+				continue
+			}
+
+			if len(vms) > 0 {
+				fmt.Fprintf(out, "\nNode: %s\n", nodeStatus.Node)
+				fmt.Fprintf(out, "%-10s %-20s %-10s %-12s\n", "VMID", "Name", "Status", "Uptime")
+				fmt.Fprintf(out, "%-10s %-20s %-10s %-12s\n", "----", "----", "------", "------")
+
+				for _, vm := range vms {
+					uptime := "N/A"
+					if vm.Uptime > 0 {
+						days := vm.Uptime / 86400
+						hours := (vm.Uptime % 86400) / 3600
+						uptime = fmt.Sprintf("%dd %dh", days, hours)
+					}
+					fmt.Fprintf(out, "%-10v %-20s %-10s %-12s\n",
+						vm.VMID,
+						vm.Name,
+						vm.Status,
+						uptime)
+					totalVMs++
+				}
+			}
+		}
+
+		if totalVMs == 0 {
+			fmt.Fprintln(out, "No virtual machines found in the cluster")
+		}
 	},
-}
-
-func init() {
-	VMCmd.AddCommand(getCmd)
-}
-
-func viewVMs() {
-
-	utility.CheckIfAuthPresent()
-
-	client := proxmox.NewClient(fmt.Sprintf("%s/api2/json", viper.GetString("server_url")),
-		proxmox.WithSession(viper.Sub("auth_ticket").GetString("ticket"), viper.Sub("auth_ticket").GetString("CSRFPreventionToken")),
-	)
-
-	nodes, err := client.Nodes(context.Background())
-	if err != nil {
-		log.Fatalf("Error fetching nodes: %v", err)
-	}
-
-	for _, node := range nodes {
-		fmt.Println("Node: " + node.Node)
-		n, err := client.Node(context.Background(), node.Node)
-		if err != nil {
-			log.Fatalf("Error fetching node %s: %v", node.Node, err)
-		}
-		vms, err := n.VirtualMachines(context.Background())
-
-		if err != nil {
-			log.Fatalf("Error fetching VMs for node %s: %v", node.Node, err)
-		}
-		for _, vm := range vms {
-			fmt.Printf("VM: %s\n ID: %d\n Status: %s\n Uptime: "+formatUptime(vm.Uptime)+"\n", vm.Name, vm.VMID, vm.Status)
-		}
-	}
-
 }

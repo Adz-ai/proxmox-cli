@@ -3,19 +3,21 @@ package vm
 import (
 	"context"
 	"fmt"
-	"github.com/luthermonson/go-proxmox"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 	"proxmox-cli/cmd/utility"
+
+	"github.com/luthermonson/go-proxmox"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var createVMCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new virtual machine from a YAML spec file",
 	Run: func(cmd *cobra.Command, args []string) {
+		out := cmd.OutOrStdout()
+		
 		specFile, _ := cmd.Flags().GetString("spec")
 		node, _ := cmd.Flags().GetString("node")
 		id, _ := cmd.Flags().GetInt("id")
@@ -23,22 +25,25 @@ var createVMCmd = &cobra.Command{
 		// Read and parse the YAML spec file
 		spec, err := readYAMLSpec(specFile)
 		if err != nil {
-			log.Fatalf("Error reading spec file: %v", err)
+			fmt.Fprintf(out, "Error reading spec file: %v\n", err)
+			return
 		}
 
 		// Map the values to a slice of VirtualMachineOption
 		vmOptions, err := mapToVMOptions(spec)
 		if err != nil {
-			log.Fatalf("Error mapping spec to VM options: %v", err)
+			fmt.Fprintf(out, "Error mapping spec to VM options: %v\n", err)
+			return
 		}
 
 		// Create the VM
 		err = createVirtualMachine(node, id, vmOptions)
 		if err != nil {
-			log.Fatalf("Error creating virtual machine: %v", err)
+			fmt.Fprintf(out, "Error creating virtual machine: %v\n", err)
+			return
 		}
 
-		fmt.Println("Virtual machine created successfully.")
+		fmt.Fprintln(out, "Virtual machine created successfully.")
 	},
 }
 
@@ -58,7 +63,6 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	VMCmd.AddCommand(createVMCmd)
 }
 
 func readYAMLSpec(filename string) (map[string]interface{}, error) {
@@ -90,15 +94,16 @@ func mapToVMOptions(spec map[string]interface{}) ([]proxmox.VirtualMachineOption
 }
 
 func createVirtualMachine(node string, vmId int, options []proxmox.VirtualMachineOption) error {
-	utility.CheckIfAuthPresent()
+	err := utility.CheckIfAuthPresent()
+	if err != nil {
+		return err
+	}
 
-	client := proxmox.NewClient(fmt.Sprintf("%s/api2/json", viper.GetString("server_url")),
-		proxmox.WithSession(viper.Sub("auth_ticket").GetString("ticket"), viper.Sub("auth_ticket").GetString("CSRFPreventionToken")),
-	)
+	client := utility.GetClient()
 
 	retrievedNode, err := client.Node(context.Background(), node)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// Create the virtual machine
@@ -113,7 +118,7 @@ func createVirtualMachine(node string, vmId int, options []proxmox.VirtualMachin
 	}
 
 	if !task.IsSuccessful {
-		log.Fatal("VM Create failed")
+		return fmt.Errorf("VM create failed")
 	}
 
 	return nil

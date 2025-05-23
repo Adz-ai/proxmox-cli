@@ -3,9 +3,7 @@ package nodes
 import (
 	"context"
 	"fmt"
-	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"log"
 	"proxmox-cli/cmd/utility"
 )
@@ -24,17 +22,47 @@ func init() {
 }
 
 func viewNodesDetails() {
-	utility.CheckIfAuthPresent()
+	err := utility.CheckIfAuthPresent()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	client := proxmox.NewClient(fmt.Sprintf("%s/api2/json", viper.GetString("server_url")),
-		proxmox.WithSession(viper.Sub("auth_ticket").GetString("ticket"), viper.Sub("auth_ticket").GetString("CSRFPreventionToken")),
-	)
+	client := utility.GetClient()
 
 	nodes, err := client.Nodes(context.Background())
 	if err != nil {
 		log.Fatalf("Error fetching nodes: %v", err)
 	}
+	
+	fmt.Println("Nodes in cluster:")
+	fmt.Println("=================")
+	fmt.Printf("%-15s %-10s %-8s %-12s\n", "Node", "Status", "Type", "Uptime")
+	fmt.Printf("%-15s %-10s %-8s %-12s\n", "----", "------", "----", "------")
 	for _, node := range nodes {
-		fmt.Printf("Node: %s\n", node.Node)
+		uptime := "N/A"
+		if node.Uptime > 0 {
+			days := node.Uptime / 86400
+			hours := (node.Uptime % 86400) / 3600
+			uptime = fmt.Sprintf("%dd %dh", days, hours)
+		}
+		fmt.Printf("%-15s %-10s %-8s %-12s\n", 
+			node.Node,
+			node.Status,
+			node.Type,
+			uptime)
 	}
+}
+
+func formatBytes(bytes uint64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

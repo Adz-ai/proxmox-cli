@@ -58,7 +58,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	Cmd.AddCommand(createVMCmd)
+	VMCmd.AddCommand(createVMCmd)
 }
 
 func readYAMLSpec(filename string) (map[string]interface{}, error) {

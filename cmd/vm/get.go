@@ -19,7 +19,7 @@ var getCmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.AddCommand(getCmd)
+	VMCmd.AddCommand(getCmd)
 }
 
 func viewVMs() {

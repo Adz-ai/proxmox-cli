@@ -35,7 +35,7 @@ func init() {
 	describeCmd.Flags().IntP("id", "i", 0, "VM ID")
 	describeCmd.MarkFlagRequired("node")
 	describeCmd.MarkFlagRequired("id")
-	Cmd.AddCommand(describeCmd)
+	VMCmd.AddCommand(describeCmd)
 }
 
 func describeVirtualMachine(node string, vmID int) error {

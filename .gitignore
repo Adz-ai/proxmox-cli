@@ -36,3 +36,7 @@ fabric.properties
 *.test
 *.out
 go.work
+
+# Claude Code artifacts
+claude-code/
+.claude/

@@ -18,8 +18,7 @@ func init() {
 	Cmd.AddCommand(deleteCmd)
 	Cmd.AddCommand(cloneCmd)
 	Cmd.AddCommand(snapshotCmd)
-	// TODO: Implement these commands when we better understand the API
-	// Cmd.AddCommand(statusCmd)
-	// Cmd.AddCommand(describeCmd)
-	// Cmd.AddCommand(restartCmd)
+	Cmd.AddCommand(statusCmd)
+	Cmd.AddCommand(describeCmd)
+	Cmd.AddCommand(restartCmd)
 }

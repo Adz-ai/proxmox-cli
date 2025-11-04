@@ -72,9 +72,15 @@ proxmox-cli status --verbose        # Detailed status with server info
 # List and inspect VMs
 proxmox-cli vm get                  # List all VMs across all nodes
 proxmox-cli vm describe -n <node> -i <vmid>  # Show detailed VM information
+proxmox-cli vm status -n <node> -i <vmid>    # Show VM status
 
 # VM lifecycle
 proxmox-cli vm create -n <node> -i <vmid> -s <spec.yaml>  # Create VM from YAML
+proxmox-cli vm start -n <node> -i <vmid>     # Start a VM
+proxmox-cli vm stop -n <node> -i <vmid>      # Stop a VM (graceful shutdown)
+proxmox-cli vm stop -n <node> -i <vmid> -f   # Force stop (power off)
+proxmox-cli vm restart -n <node> -i <vmid>   # Restart a VM (graceful reboot)
+proxmox-cli vm restart -n <node> -i <vmid> -f  # Force restart (reset)
 proxmox-cli vm delete -n <node> -i <vmid>    # Delete a VM
 ```
 
@@ -82,28 +88,36 @@ proxmox-cli vm delete -n <node> -i <vmid>    # Delete a VM
 ```bash
 # List and inspect containers
 proxmox-cli lxc get                 # List all containers across all nodes
-proxmox-cli lxc describe -n <node> -i <ctid>  # Show container details
+proxmox-cli lxc describe -n <node> -i <ctid>  # Show detailed container information
+proxmox-cli lxc status -n <node> -i <ctid>    # Show container status
 
 # Container lifecycle
 proxmox-cli lxc create -n <node> -i <ctid> -s <spec.yaml>  # Create from YAML
 proxmox-cli lxc start -n <node> -i <ctid>     # Start a container
 proxmox-cli lxc stop -n <node> -i <ctid>      # Stop a container
+proxmox-cli lxc restart -n <node> -i <ctid>   # Restart a container
 proxmox-cli lxc delete -n <node> -i <ctid>    # Delete a container
+proxmox-cli lxc delete -n <node> -i <ctid> -f # Force delete a container
 
-# Advanced operations (coming soon)
-proxmox-cli lxc clone -n <node> -s <source> -t <target> --name <name>
-proxmox-cli lxc snapshot create -n <node> -i <ctid> --name <snapshot>
-proxmox-cli lxc snapshot list -n <node> -i <ctid>
+# Advanced operations
+proxmox-cli lxc clone -n <node> -s <source> -t <target> --name <name>  # Clone container
+proxmox-cli lxc clone -n <node> -s <source> -t <target> --full        # Full clone
+proxmox-cli lxc snapshot create -n <node> -i <ctid> --name <snapshot>  # Create snapshot
+proxmox-cli lxc snapshot list -n <node> -i <ctid>                      # List snapshots
 ```
 
 ### Node Management
 ```bash
+# Node information
 proxmox-cli nodes get               # List all cluster nodes with status
 proxmox-cli nodes describe -n <node>  # Show detailed node information
 
+# Node operations
+proxmox-cli nodes storage -n <node>     # List storage on node
+proxmox-cli nodes tasks -n <node>       # List recent tasks on node
+proxmox-cli nodes tasks -n <node> -l 50 # List last 50 tasks
+
 # Future node operations (planned)
-# proxmox-cli nodes storage -n <node>     # List storage on node
-# proxmox-cli nodes tasks -n <node>       # List tasks on node
 # proxmox-cli nodes services list -n <node>  # List services on node
 ```
 
@@ -231,24 +245,22 @@ proxmox-cli/
 
 ### ✅ Implemented Features
 - Authentication and session management
-- Node listing and detailed information
-- VM operations (list, describe, create, delete)
-- LXC operations (list, create, start, stop, delete)
+- Node listing, detailed information, storage, and tasks
+- VM operations (list, describe, create, delete, start, stop, restart, status)
+- LXC operations (list, describe, create, start, stop, restart, delete, status)
+- LXC advanced operations (clone with full/linked support, snapshots)
 - Comprehensive error handling
 - Full BDD test coverage
 
-### 🔄 In Development
-- LXC advanced operations (clone, snapshots)
-- Node storage and task management
-- VM advanced operations (start, stop, snapshots)
-
 ### 📋 Planned Features
+- VM snapshots and cloning
 - Template management
-- Network configuration
-- Storage management
-- Backup operations
+- Network configuration management
+- Storage pool management
+- Backup and restore operations
 - Bulk operations
 - Configuration profiles
+- Services management on nodes
 
 ## 🤝 Contributing
 

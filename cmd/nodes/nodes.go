@@ -13,8 +13,8 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.AddCommand(getCmd)
 	Cmd.AddCommand(describeCmd)
-	// TODO: Add these commands when we understand the API better
-	// Cmd.AddCommand(storageCmd)
-	// Cmd.AddCommand(tasksCmd)
+	Cmd.AddCommand(storageCmd)
+	Cmd.AddCommand(tasksCmd)
+	// TODO: Add this command when we understand the API better
 	// Cmd.AddCommand(servicesCmd)
 }

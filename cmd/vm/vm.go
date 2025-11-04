@@ -15,4 +15,8 @@ func init() {
 	Cmd.AddCommand(createVMCmd)
 	Cmd.AddCommand(deleteCmd)
 	Cmd.AddCommand(describeCmd)
+	Cmd.AddCommand(startCmd)
+	Cmd.AddCommand(stopCmd)
+	Cmd.AddCommand(restartCmd)
+	Cmd.AddCommand(statusCmd)
 }

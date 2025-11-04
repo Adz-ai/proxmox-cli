@@ -1,5 +1,6 @@
 /*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
+Copyright © 2024 Adz-ai
+Licensed under the Apache License, Version 2.0
 */
 package main
 

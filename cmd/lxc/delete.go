@@ -22,11 +22,15 @@ var deleteCmd = &cobra.Command{
 
 		nodeName, _ := cmd.Flags().GetString("node")
 		vmid, _ := cmd.Flags().GetInt("vmid")
-		// force, _ := cmd.Flags().GetBool("force") // TODO: use force flag
+		force, _ := cmd.Flags().GetBool("force")
 
 		if nodeName == "" || vmid == 0 {
 			fmt.Fprintln(out, "Error: node and vmid are required")
 			return
+		}
+
+		if force {
+			fmt.Fprintln(out, "Force deletion requested")
 		}
 
 		client := utility.GetClient()

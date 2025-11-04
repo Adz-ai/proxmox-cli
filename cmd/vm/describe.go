@@ -60,14 +60,12 @@ func describeVirtualMachine(out io.Writer, node string, vmID int) error {
 		return err
 	}
 
-	_, err = retrievedNode.VirtualMachine(context.Background(), vmID)
+	vm, err := retrievedNode.VirtualMachine(context.Background(), vmID)
 	if err != nil {
 		return err
 	}
 
-	// TODO: Need to refactor this to work with VirtualMachineInterface
-	// For now, just print a simple message
-	fmt.Fprintf(out, "VM %d details would be shown here\n", vmID)
+	printVMAttributes(out, vm)
 
 	return nil
 }

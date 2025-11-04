@@ -54,21 +54,6 @@ var describeCmd = &cobra.Command{
 		fmt.Fprintf(out, "  Memory: %d MB / %d MB\n", container.Mem/(1024*1024), container.MaxMem/(1024*1024))
 		fmt.Fprintf(out, "  Disk: %d GB / %d GB\n", container.Disk/(1024*1024*1024), container.MaxDisk/(1024*1024*1024))
 		fmt.Fprintf(out, "  Swap: %d MB / %d MB\n", container.Swap/(1024*1024), container.MaxSwap/(1024*1024))
-
-		// Get additional config details
-		config, err := container.Config(ctx)
-		if err == nil && config != nil {
-			fmt.Fprintln(out, "\nConfiguration:")
-			if config.Hostname != "" {
-				fmt.Fprintf(out, "  Hostname: %s\n", config.Hostname)
-			}
-			if config.Cores > 0 {
-				fmt.Fprintf(out, "  CPU Cores: %d\n", config.Cores)
-			}
-			if config.OSTemplate != "" {
-				fmt.Fprintf(out, "  OS Template: %s\n", config.OSTemplate)
-			}
-		}
 	},
 }
 

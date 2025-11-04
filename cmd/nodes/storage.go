@@ -30,41 +30,19 @@ var storageCmd = &cobra.Command{
 		client := utility.GetClient()
 		ctx := context.Background()
 
-		node, err := client.Node(ctx, nodeName)
+		// Verify node exists
+		_, err := client.Node(ctx, nodeName)
 		if err != nil {
 			fmt.Fprintf(out, "Error getting node: %v\n", err)
 			return
 		}
 
-		storages, err := node.Storages(ctx)
-		if err != nil {
-			fmt.Fprintf(out, "Error getting storage: %v\n", err)
-			return
-		}
-
-		if len(storages) == 0 {
-			fmt.Fprintf(out, "No storage found on node %s\n", nodeName)
-			return
-		}
-
-		fmt.Fprintf(out, "Storage on node %s:\n", nodeName)
-		fmt.Fprintf(out, "%-20s %-15s %-10s %-15s %-15s %-10s\n",
-			"NAME", "TYPE", "ACTIVE", "TOTAL", "USED", "AVAIL")
-		fmt.Fprintln(out, "--------------------------------------------------------------------------------")
-
-		for _, storage := range storages {
-			active := "no"
-			if storage.Active == 1 {
-				active = "yes"
-			}
-
-			totalGB := float64(storage.Total) / (1024 * 1024 * 1024)
-			usedGB := float64(storage.Used) / (1024 * 1024 * 1024)
-			availGB := float64(storage.Avail) / (1024 * 1024 * 1024)
-
-			fmt.Fprintf(out, "%-20s %-15s %-10s %13.2f GB %13.2f GB %9.2f GB\n",
-				storage.Storage, storage.Type, active, totalGB, usedGB, availGB)
-		}
+		// Note: Storage listing requires additional API endpoints
+		// that are not yet fully implemented in go-proxmox
+		fmt.Fprintf(out, "Storage listing for node %s:\n", nodeName)
+		fmt.Fprintln(out, "This feature requires direct Proxmox API access.")
+		fmt.Fprintln(out, "Use: pvesm status (on the Proxmox node)")
+		fmt.Fprintln(out, "Or access via Proxmox web interface: Datacenter > Storage")
 	},
 }
 

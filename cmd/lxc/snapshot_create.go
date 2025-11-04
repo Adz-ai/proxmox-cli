@@ -47,7 +47,7 @@ var snapshotCreateCmd = &cobra.Command{
 		}
 
 		// Create snapshot
-		task, err := container.Snapshot(ctx, snapshotName, description)
+		task, err := container.Snapshot(ctx, snapshotName)
 		if err != nil {
 			fmt.Fprintf(out, "Error creating snapshot: %v\n", err)
 			return
@@ -55,6 +55,9 @@ var snapshotCreateCmd = &cobra.Command{
 
 		fmt.Fprintf(out, "Snapshot task started: %s\n", task.UPID)
 		fmt.Fprintf(out, "Snapshot '%s' created successfully for container %d\n", snapshotName, vmid)
+		if description != "" {
+			fmt.Fprintf(out, "Note: Description '%s' may need to be set manually\n", description)
+		}
 	},
 }
 

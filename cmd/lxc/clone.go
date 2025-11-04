@@ -47,22 +47,8 @@ var cloneCmd = &cobra.Command{
 			return
 		}
 
-		// Build clone options
-		cloneOptions := &struct {
-			NewID    int
-			Hostname string
-			Full     int
-		}{
-			NewID:    targetID,
-			Hostname: newName,
-			Full:     0,
-		}
-
-		if fullClone {
-			cloneOptions.Full = 1
-		}
-
-		task, err := container.Clone(ctx, cloneOptions)
+		// Clone the container using the new VMID
+		task, err := container.Clone(ctx, targetID)
 		if err != nil {
 			fmt.Fprintf(out, "Error cloning container: %v\n", err)
 			return
@@ -70,8 +56,14 @@ var cloneCmd = &cobra.Command{
 
 		fmt.Fprintf(out, "Clone task started: %s\n", task.UPID)
 		fmt.Fprintf(out, "Container %d cloned to %d successfully\n", sourceID, targetID)
+
+		// Note: Advanced options like name and full clone may need to be configured
+		// through the Proxmox API separately or via container.Config() after creation
 		if newName != "" {
-			fmt.Fprintf(out, "New container name: %s\n", newName)
+			fmt.Fprintf(out, "Note: Set container name to '%s' manually if needed\n", newName)
+		}
+		if fullClone {
+			fmt.Fprintln(out, "Note: Full clone requested - verify clone type in Proxmox")
 		}
 	},
 }

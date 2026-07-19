@@ -84,7 +84,14 @@ when prompted. Tokens do not expire and take precedence over a stored ticket.
 -o, --output table|json   # Structured output on get/describe/list commands
     --timeout <duration>  # Maximum time to wait for Proxmox tasks (default 10m)
     --context <name>      # Target a specific cluster context for this command
+-y, --yes                 # Skip confirmation prompts on destructive commands
 ```
+
+Destructive commands (`vm delete`, `lxc delete`, `snapshot rollback`,
+`snapshot delete`, `backup restore --force`, `context delete`) ask for
+confirmation before acting; pass `--yes` in scripts. Long-running
+operations (backups, migrations, restores) stream the Proxmox task log
+while they wait, so you can watch progress instead of a silent cursor.
 
 ### Multiple Clusters (Contexts)
 ```bash

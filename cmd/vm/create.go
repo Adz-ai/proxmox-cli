@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -56,7 +57,7 @@ func newCreateVMCmd() *cobra.Command {
 				return fmt.Errorf("map VM spec to options: %w", err)
 			}
 
-			createdID, err := createVirtualMachine(cmd.Context(), node, id, vmOptions, utility.TaskTimeout(cmd))
+			createdID, err := createVirtualMachine(cmd.Context(), node, id, vmOptions, utility.TaskTimeout(cmd), out)
 			if err != nil {
 				return fmt.Errorf("create virtual machine on node %q: %w", node, err)
 			}
@@ -123,7 +124,7 @@ func mapToVMOptions(spec map[string]interface{}) ([]proxmox.VirtualMachineOption
 	return options, nil
 }
 
-func createVirtualMachine(ctx context.Context, node string, vmID int, options []proxmox.VirtualMachineOption, timeout time.Duration) (int, error) {
+func createVirtualMachine(ctx context.Context, node string, vmID int, options []proxmox.VirtualMachineOption, timeout time.Duration, progress io.Writer) (int, error) {
 	client, err := utility.AuthenticatedClient()
 	if err != nil {
 		return 0, fmt.Errorf("authenticate Proxmox client: %w", err)
@@ -143,7 +144,7 @@ func createVirtualMachine(ctx context.Context, node string, vmID int, options []
 	if err != nil {
 		return 0, fmt.Errorf("start create task: %w", err)
 	}
-	if err := utility.WaitForTask(ctx, task, timeout); err != nil {
+	if err := utility.WaitForTask(ctx, task, timeout, progress); err != nil {
 		return 0, fmt.Errorf("wait for create task: %w", err)
 	}
 

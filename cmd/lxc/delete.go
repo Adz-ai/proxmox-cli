@@ -41,6 +41,10 @@ func newDeleteCmd() *cobra.Command {
 				return err
 			}
 
+			if err := utility.ConfirmAction(cmd, fmt.Sprintf("Delete container %d on node %q? This cannot be undone.", vmid, nodeName)); err != nil {
+				return err
+			}
+
 			node, err := client.Node(ctx, nodeName)
 			if err != nil {
 				return fmt.Errorf("get node %q: %w", nodeName, err)
@@ -58,7 +62,7 @@ func newDeleteCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("delete container %d: %w", vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("delete container %d: %w", vmid, err)
 			}
 
@@ -76,5 +80,6 @@ func newDeleteCmd() *cobra.Command {
 			panic(err)
 		}
 	}
+	utility.AddYesFlag(cmd)
 	return cmd
 }

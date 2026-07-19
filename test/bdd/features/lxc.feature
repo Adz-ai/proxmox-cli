@@ -44,7 +44,7 @@ Feature: LXC Container Management
   Scenario: Delete an LXC container
     Given the CLI is configured and authenticated
     And an LXC container with ID 200 exists
-    When I run the command "./proxmox-cli lxc delete -n pve -i 200"
+    When I run the command "./proxmox-cli lxc delete -n pve -i 200 --yes"
     Then the container should be deleted successfully
 
   Scenario: Clone an LXC container

@@ -918,7 +918,10 @@ func TaskTimeout(cmd *cobra.Command) time.Duration {
 	return timeout
 }
 
-func WaitForTask(ctx context.Context, task *proxmox.Task, timeout time.Duration) error {
+// WaitForTask waits for a Proxmox task to finish. When progress is non-nil,
+// the task's log lines are streamed to it while waiting so long operations
+// (backups, migrations, restores) are not silent.
+func WaitForTask(ctx context.Context, task *proxmox.Task, timeout time.Duration, progress io.Writer) error {
 	if task == nil {
 		return errors.New("no task returned by Proxmox")
 	}
@@ -933,11 +936,25 @@ func WaitForTask(ctx context.Context, task *proxmox.Task, timeout time.Duration)
 	if task.UPID == "" {
 		return nil
 	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if progress != nil {
+		// Watch fails for tasks with no log yet (e.g. already finished);
+		// the WaitFor below covers those.
+		if watch, err := task.Watch(waitCtx, 0); err == nil {
+			for line := range watch {
+				fmt.Fprintln(progress, "  "+line)
+			}
+		}
+	}
+
 	seconds := int(math.Ceil(timeout.Seconds()))
 	if seconds < 1 {
 		seconds = 1
 	}
-	if err := task.WaitFor(ctx, seconds); err != nil {
+	if err := task.WaitFor(waitCtx, seconds); err != nil {
 		return fmt.Errorf("wait for task %s: %w", task.UPID, err)
 	}
 	if !task.IsSuccessful {

@@ -96,7 +96,7 @@ func newCreateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("back up guest %d: %w", vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("back up guest %d: %w", vmid, err)
 			}
 
@@ -284,6 +284,12 @@ an existing guest with the same ID.`,
 				return fmt.Errorf("archive cannot be empty")
 			}
 
+			if force {
+				if err := utility.ConfirmAction(cmd, fmt.Sprintf("Overwrite existing guest %d with archive %q?", vmid, archive)); err != nil {
+					return err
+				}
+			}
+
 			client, err := utility.AuthenticatedClient()
 			if err != nil {
 				return fmt.Errorf("authenticate Proxmox client: %w", err)
@@ -323,7 +329,7 @@ an existing guest with the same ID.`,
 			if err != nil {
 				return fmt.Errorf("restore guest %d from %q: %w", vmid, archive, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("restore guest %d from %q: %w", vmid, archive, err)
 			}
 
@@ -343,5 +349,6 @@ an existing guest with the same ID.`,
 		}
 	}
 	utility.RegisterNodeFlagCompletion(cmd, "node")
+	utility.AddYesFlag(cmd)
 	return cmd
 }

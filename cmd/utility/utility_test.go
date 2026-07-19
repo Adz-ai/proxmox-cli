@@ -288,18 +288,18 @@ func TestNormalizeServerURL(t *testing.T) {
 }
 
 func TestWaitForCompletedTask(t *testing.T) {
-	if err := WaitForTask(context.Background(), &proxmox.Task{IsSuccessful: true}, time.Second); err != nil {
+	if err := WaitForTask(context.Background(), &proxmox.Task{IsSuccessful: true}, time.Second, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := WaitForTask(context.Background(), &proxmox.Task{IsFailed: true, ExitStatus: "failed"}, time.Second); err == nil {
+	if err := WaitForTask(context.Background(), &proxmox.Task{IsFailed: true, ExitStatus: "failed"}, time.Second, nil); err == nil {
 		t.Fatal("expected failed task error")
 	}
-	if err := WaitForTask(context.Background(), nil, time.Second); err == nil {
+	if err := WaitForTask(context.Background(), nil, time.Second, nil); err == nil {
 		t.Fatal("expected nil task error")
 	}
 	// A task without a UPID comes from a synchronous API response; there is
 	// nothing to poll and the operation already succeeded.
-	if err := WaitForTask(context.Background(), &proxmox.Task{}, time.Second); err != nil {
+	if err := WaitForTask(context.Background(), &proxmox.Task{}, time.Second, nil); err != nil {
 		t.Fatalf("synchronous response should succeed, got %v", err)
 	}
 }

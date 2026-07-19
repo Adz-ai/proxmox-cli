@@ -37,7 +37,7 @@ func newVMTaskCmd(spec vmTaskSpec) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("%s VM %d: %w", spec.verb, id, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("%s VM %d: %w", spec.verb, id, err)
 			}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"io"
 	"strings"
 	"time"
 
@@ -33,7 +34,11 @@ func newDeleteCmd() *cobra.Command {
 				return fmt.Errorf("validate id: id must be positive")
 			}
 
-			if err := deleteVM(cmd.Context(), node, id, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.ConfirmAction(cmd, fmt.Sprintf("Delete VM %d on node %q? This cannot be undone.", id, node)); err != nil {
+				return err
+			}
+
+			if err := deleteVM(cmd.Context(), node, id, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("delete VM %d from node %q: %w", id, node, err)
 			}
 
@@ -50,11 +55,12 @@ func newDeleteCmd() *cobra.Command {
 	if err := cmd.MarkFlagRequired("id"); err != nil {
 		panic(err)
 	}
+	utility.AddYesFlag(cmd)
 
 	return cmd
 }
 
-func deleteVM(ctx context.Context, node string, id int, timeout time.Duration) error {
+func deleteVM(ctx context.Context, node string, id int, timeout time.Duration, progress io.Writer) error {
 	client, err := utility.AuthenticatedClient()
 	if err != nil {
 		return fmt.Errorf("authenticate Proxmox client: %w", err)
@@ -74,7 +80,7 @@ func deleteVM(ctx context.Context, node string, id int, timeout time.Duration) e
 	if err != nil {
 		return fmt.Errorf("start delete task: %w", err)
 	}
-	if err := utility.WaitForTask(ctx, task, timeout); err != nil {
+	if err := utility.WaitForTask(ctx, task, timeout, progress); err != nil {
 		return fmt.Errorf("wait for delete task: %w", err)
 	}
 

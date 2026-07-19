@@ -50,7 +50,7 @@ func newConfigSetCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("update config of container %d: %w", vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("update config of container %d: %w", vmid, err)
 			}
 
@@ -100,7 +100,7 @@ func newResizeCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("resize volume %q of container %d: %w", disk, vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("resize volume %q of container %d: %w", disk, vmid, err)
 			}
 
@@ -150,7 +150,7 @@ func newTagsCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("add tag %q to container %d: %w", tag, vmid, err)
 				}
-				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 					return fmt.Errorf("add tag %q to container %d: %w", tag, vmid, err)
 				}
 			}
@@ -159,7 +159,7 @@ func newTagsCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("remove tag %q from container %d: %w", tag, vmid, err)
 				}
-				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 					return fmt.Errorf("remove tag %q from container %d: %w", tag, vmid, err)
 				}
 			}

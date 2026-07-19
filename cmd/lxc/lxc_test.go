@@ -161,11 +161,56 @@ func TestSnapshotDeleteCommand(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"snapshot", "delete", "-n", "pve", "-i", "200", "--name", "old"})
+	cmd.SetArgs([]string{"snapshot", "delete", "-n", "pve", "-i", "200", "--name", "old", "--yes"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `Snapshot "old" of container 200 deleted successfully`) {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
+func TestDeleteDeclinedWithoutConfirmation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	// No expectations: declining must happen before any API call.
+	setupAuthenticatedMocks(t, ctrl)
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetIn(strings.NewReader("n\n"))
+	cmd.SetArgs([]string{"delete", "-n", "pve", "-i", "200"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "aborted") {
+		t.Fatalf("expected aborted error, got %v", err)
+	}
+	if !strings.Contains(out.String(), `Delete container 200 on node "pve"?`) {
+		t.Fatalf("expected confirmation prompt:\n%s", out.String())
+	}
+}
+
+func TestDeleteProceedsWithTypedConfirmation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := setupAuthenticatedMocks(t, ctrl)
+	node := mocks.NewMockNodeInterface(ctrl)
+	container := mocks.NewMockContainerInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().Container(ctx, 200).Return(container, nil)
+	container.EXPECT().Delete(ctx, gomock.Any()).Return(&proxmox.Task{IsSuccessful: true}, nil)
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetIn(strings.NewReader("y\n"))
+	cmd.SetArgs([]string{"delete", "-n", "pve", "-i", "200"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Container 200 deleted successfully") {
 		t.Fatalf("unexpected output:\n%s", out.String())
 	}
 }

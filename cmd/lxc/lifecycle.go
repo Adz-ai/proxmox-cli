@@ -38,7 +38,7 @@ func newContainerTaskCmd(spec containerTaskSpec) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("%s container %d: %w", spec.verb, vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("%s container %d: %w", spec.verb, vmid, err)
 			}
 

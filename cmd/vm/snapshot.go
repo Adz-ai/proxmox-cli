@@ -47,6 +47,13 @@ func newSnapshotRollbackCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			_, targetID, err := vmTargetFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+			if err := utility.ConfirmAction(cmd, fmt.Sprintf("Roll back VM %d to snapshot %q? Changes made since the snapshot will be lost.", targetID, name)); err != nil {
+				return err
+			}
 
 			vm, id, err := vmFromFlags(cmd)
 			if err != nil {
@@ -57,7 +64,7 @@ func newSnapshotRollbackCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("roll back VM %d to snapshot %q: %w", id, name, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("roll back VM %d to snapshot %q: %w", id, name, err)
 			}
 
@@ -71,6 +78,7 @@ func newSnapshotRollbackCmd() *cobra.Command {
 	if err := cmd.MarkFlagRequired("name"); err != nil {
 		panic(err)
 	}
+	utility.AddYesFlag(cmd)
 	return cmd
 }
 
@@ -86,6 +94,13 @@ func newSnapshotDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			_, targetID, err := vmTargetFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+			if err := utility.ConfirmAction(cmd, fmt.Sprintf("Delete snapshot %q of VM %d?", name, targetID)); err != nil {
+				return err
+			}
 
 			vm, id, err := vmFromFlags(cmd)
 			if err != nil {
@@ -96,7 +111,7 @@ func newSnapshotDeleteCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("delete snapshot %q of VM %d: %w", name, id, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("delete snapshot %q of VM %d: %w", name, id, err)
 			}
 
@@ -110,6 +125,7 @@ func newSnapshotDeleteCmd() *cobra.Command {
 	if err := cmd.MarkFlagRequired("name"); err != nil {
 		panic(err)
 	}
+	utility.AddYesFlag(cmd)
 	return cmd
 }
 
@@ -139,7 +155,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("create snapshot %q for VM %d: %w", name, id, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("create snapshot %q for VM %d: %w", name, id, err)
 			}
 

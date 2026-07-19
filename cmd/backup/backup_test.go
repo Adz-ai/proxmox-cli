@@ -127,7 +127,7 @@ func TestBackupRestoreDetectsGuestType(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"restore", "-n", "pve", "-i", "200",
-		"--archive", "local:backup/vzdump-lxc-200-2026_07_18-01_00_00.tar.zst", "--force"})
+		"--archive", "local:backup/vzdump-lxc-200-2026_07_18-01_00_00.tar.zst", "--force", "--yes"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}

@@ -44,7 +44,7 @@ need --restart (stop, move, start) since LXC does not support live migration.`,
 			if err != nil {
 				return fmt.Errorf("migrate container %d to %q: %w", vmid, target, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("migrate container %d to %q: %w", vmid, target, err)
 			}
 

@@ -50,7 +50,7 @@ func newConfigSetCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("update config of VM %d: %w", id, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("update config of VM %d: %w", id, err)
 			}
 
@@ -100,7 +100,7 @@ func newResizeCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("resize disk %q of VM %d: %w", disk, id, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("resize disk %q of VM %d: %w", disk, id, err)
 			}
 
@@ -150,7 +150,7 @@ func newTagsCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("add tag %q to VM %d: %w", tag, id, err)
 				}
-				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 					return fmt.Errorf("add tag %q to VM %d: %w", tag, id, err)
 				}
 			}
@@ -159,7 +159,7 @@ func newTagsCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("remove tag %q from VM %d: %w", tag, id, err)
 				}
-				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 					return fmt.Errorf("remove tag %q from VM %d: %w", tag, id, err)
 				}
 			}

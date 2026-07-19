@@ -26,6 +26,8 @@ jobs:
         run: go generate ./internal/interfaces && git diff --exit-code -- test/mocks/proxmox_client.go
       - name: Vet
         run: go vet ./...
+      - name: Vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
       - name: Lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:

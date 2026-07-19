@@ -68,7 +68,7 @@ are reported before the migration starts.`,
 			if err != nil {
 				return fmt.Errorf("migrate VM %d to %q: %w", id, target, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("migrate VM %d to %q: %w", id, target, err)
 			}
 

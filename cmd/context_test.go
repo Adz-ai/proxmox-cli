@@ -162,7 +162,7 @@ func TestContextDelete(t *testing.T) {
 	}
 
 	viper.Reset()
-	if _, err := runRoot(t, "context", "delete", "work"); err != nil {
+	if _, err := runRoot(t, "context", "delete", "work", "--yes"); err != nil {
 		t.Fatal(err)
 	}
 

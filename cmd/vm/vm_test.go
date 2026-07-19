@@ -131,7 +131,7 @@ func TestSnapshotRollbackCommand(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"snapshot", "rollback", "-n", "pve", "-i", "100", "--name", "nightly"})
+	cmd.SetArgs([]string{"snapshot", "rollback", "-n", "pve", "-i", "100", "--name", "nightly", "--yes"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}

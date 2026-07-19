@@ -100,7 +100,7 @@ func newContextUseCmd() *cobra.Command {
 }
 
 func newContextDeleteCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "delete <name>",
 		Short: "Delete a context and its credentials",
 		Args:  cobra.ExactArgs(1),
@@ -126,6 +126,10 @@ func newContextDeleteCmd() *cobra.Command {
 				return fmt.Errorf("cannot delete the active context; switch first with 'proxmox-cli context use <other>'")
 			}
 
+			if err := utility.ConfirmAction(cmd, fmt.Sprintf("Delete context %q and its stored credentials?", name)); err != nil {
+				return err
+			}
+
 			utility.DeleteContext(name)
 			if err := utility.WriteConfig(); err != nil {
 				return fmt.Errorf("delete context: %w", err)
@@ -135,4 +139,6 @@ func newContextDeleteCmd() *cobra.Command {
 			return nil
 		},
 	}
+	utility.AddYesFlag(cmd)
+	return cmd
 }

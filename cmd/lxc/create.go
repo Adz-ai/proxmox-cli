@@ -74,7 +74,7 @@ func newCreateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("create container %d: %w", vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd), out); err != nil {
 				return fmt.Errorf("create container %d: %w", vmid, err)
 			}
 

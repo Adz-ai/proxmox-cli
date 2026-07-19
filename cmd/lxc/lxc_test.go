@@ -170,6 +170,62 @@ func TestSnapshotDeleteCommand(t *testing.T) {
 	}
 }
 
+func TestResizeUsesSynchronousResponse(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := setupAuthenticatedMocks(t, ctrl)
+	node := mocks.NewMockNodeInterface(ctrl)
+	container := mocks.NewMockContainerInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().Container(ctx, 200).Return(container, nil)
+	// Container config/resize responses can be synchronous: a task with no
+	// UPID and no completion flags means the change is already applied.
+	container.EXPECT().Resize(ctx, "rootfs", "+2G").Return(&proxmox.Task{}, nil)
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"resize", "-n", "pve", "-i", "200", "--disk", "rootfs", "--size", "+2G"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Volume rootfs of container 200 resized successfully") {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
+func TestLXCMigrateCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := setupAuthenticatedMocks(t, ctrl)
+	node := mocks.NewMockNodeInterface(ctrl)
+	container := mocks.NewMockContainerInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().Container(ctx, 200).Return(container, nil)
+	container.EXPECT().Migrate(ctx, gomock.Any()).DoAndReturn(
+		func(_ context.Context, options *proxmox.ContainerMigrateOptions) (*proxmox.Task, error) {
+			if options.Target != "pve2" || !bool(options.Restart) {
+				t.Errorf("unexpected migrate options: %+v", options)
+			}
+			return &proxmox.Task{IsSuccessful: true}, nil
+		})
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"migrate", "-n", "pve", "-i", "200", "--target", "pve2", "--restart"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Container 200 migrated to pve2 successfully") {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
 func TestDescribeJSONOutput(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := setupAuthenticatedMocks(t, ctrl)

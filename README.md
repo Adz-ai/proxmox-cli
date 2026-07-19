@@ -115,6 +115,15 @@ proxmox-cli vm snapshot create -n <node> -i <vmid> --name <snapshot>
 proxmox-cli vm snapshot list -n <node> -i <vmid>
 proxmox-cli vm snapshot rollback -n <node> -i <vmid> --name <snapshot>
 proxmox-cli vm snapshot delete -n <node> -i <vmid> --name <snapshot>
+
+# Cloning and migration
+proxmox-cli vm clone -n <node> -s <source> --name <name> [--full] [--storage <storage>]
+proxmox-cli vm migrate -n <node> -i <vmid> --target <node> [--online] [--with-local-disks]
+
+# Configuration
+proxmox-cli vm config set -n <node> -i <vmid> memory=4096 cores=4
+proxmox-cli vm resize -n <node> -i <vmid> --disk scsi0 --size +10G
+proxmox-cli vm tags -n <node> -i <vmid> --add web --remove old
 ```
 
 ### LXC Container Management
@@ -140,7 +149,25 @@ proxmox-cli lxc snapshot list -n <node> -i <ctid>
 proxmox-cli lxc snapshot rollback -n <node> -i <ctid> --name <snapshot> [--start]
 proxmox-cli lxc snapshot delete -n <node> -i <ctid> --name <snapshot>
 proxmox-cli lxc clone -n <node> -s <source> --name <name>
+
+# Migration and configuration
+proxmox-cli lxc migrate -n <node> -i <ctid> --target <node> [--restart]
+proxmox-cli lxc config set -n <node> -i <ctid> memory=2048 swap=512
+proxmox-cli lxc resize -n <node> -i <ctid> --disk rootfs --size +2G
+proxmox-cli lxc tags -n <node> -i <ctid> --add web --remove old
 ```
+
+### Backup & Restore
+```bash
+proxmox-cli backup create -n <node> -i <vmid> --storage <storage> [--mode snapshot|suspend|stop]
+proxmox-cli backup list -n <node> --storage <storage> [-i <vmid>]
+proxmox-cli backup restore -n <node> -i <vmid> --archive <volid> [--storage <storage>] [--force]
+```
+
+The restore command detects whether the archive is a VM or container backup
+from its name. `vm migrate` checks migration preconditions first, so blocking
+problems (local resources, running without --online, local disks) are
+reported before anything moves.
 
 ### Node Management
 ```bash
@@ -292,24 +319,22 @@ proxmox-cli/
 - Session and API token authentication
 - Cluster-wide resource overview with type, node, and status filters
 - Node listing, details, storage, and task history
-- VM operations (list, describe, create, start, shutdown, stop, restart, suspend, resume, delete)
-- LXC operations (all of the above plus clone)
+- Full VM and LXC lifecycle (create, start, shutdown, stop, restart, suspend, resume, delete)
+- Cloning and migration with preflight checks for both guest types
 - VM and LXC snapshots (create, list, rollback, delete)
+- Backups: vzdump create, list, and restore with guest-type detection
+- Configuration editing, disk resize, and tag management
 - Auto-assigned guest IDs on create and clone
 - Shell completion with live node-name lookup
 - JSON output for read commands and configurable task timeouts
 - Nonzero exit statuses for operational failures
 - TLS verification, custom CA support, and private config files
 
-### In Development
-- VM clone operations
-- Migration between nodes
-
 ### Planned Features
-- Template management
-- Network configuration
-- Storage management
-- Backup operations
+- Guest agent commands (exec, IP discovery)
+- Interactive console access
+- Template and ISO management
+- Metrics and monitoring views
 - Bulk operations
 - Configuration profiles
 

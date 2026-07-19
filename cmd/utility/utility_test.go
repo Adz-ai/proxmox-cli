@@ -296,6 +296,11 @@ func TestWaitForCompletedTask(t *testing.T) {
 	if err := WaitForTask(context.Background(), nil, time.Second); err == nil {
 		t.Fatal("expected nil task error")
 	}
+	// A task without a UPID comes from a synchronous API response; there is
+	// nothing to poll and the operation already succeeded.
+	if err := WaitForTask(context.Background(), &proxmox.Task{}, time.Second); err != nil {
+		t.Fatalf("synchronous response should succeed, got %v", err)
+	}
 }
 
 func TestNewHTTPClientTLSDefaults(t *testing.T) {

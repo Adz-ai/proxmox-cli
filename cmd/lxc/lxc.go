@@ -29,6 +29,10 @@ func NewCmd() *cobra.Command {
 		newDeleteCmd(),
 		newCloneCmd(),
 		newSnapshotCmd(),
+		newMigrateCmd(),
+		newConfigCmd(),
+		newResizeCmd(),
+		newTagsCmd(),
 	)
 	return cmd
 }

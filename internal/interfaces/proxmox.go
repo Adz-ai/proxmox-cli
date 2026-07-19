@@ -6,7 +6,7 @@ import (
 	"github.com/luthermonson/go-proxmox"
 )
 
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=../../test/mocks/proxmox_client.go -package=mocks github.com/Adz-ai/proxmox-cli/internal/interfaces ProxmoxClientInterface,NodeInterface,ContainerInterface,VirtualMachineInterface,ClusterInterface
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=../../test/mocks/proxmox_client.go -package=mocks github.com/Adz-ai/proxmox-cli/internal/interfaces ProxmoxClientInterface,NodeInterface,ContainerInterface,VirtualMachineInterface,ClusterInterface,StorageInterface
 
 // ProxmoxClientInterface defines the interface that both real and mock clients must implement
 type ProxmoxClientInterface interface {
@@ -31,7 +31,14 @@ type NodeInterface interface {
 	NewVirtualMachine(ctx context.Context, vmid int, options ...proxmox.VirtualMachineOption) (*proxmox.Task, error)
 	NewContainer(ctx context.Context, vmid int, options ...proxmox.ContainerOption) (*proxmox.Task, error)
 	Storages(ctx context.Context) (proxmox.Storages, error)
+	Storage(ctx context.Context, name string) (StorageInterface, error)
 	Tasks(ctx context.Context, options *proxmox.NodeTasksOptions) ([]*proxmox.Task, error)
+	Vzdump(ctx context.Context, options *proxmox.VirtualMachineBackupOptions) (*proxmox.Task, error)
+}
+
+// StorageInterface defines the interface for storage operations
+type StorageInterface interface {
+	GetContent(ctx context.Context) ([]*proxmox.StorageContent, error)
 }
 
 // ContainerInterface defines the interface for container operations
@@ -49,6 +56,11 @@ type ContainerInterface interface {
 	DeleteSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
 	Suspend(ctx context.Context) (*proxmox.Task, error)
 	Resume(ctx context.Context) (*proxmox.Task, error)
+	Migrate(ctx context.Context, options *proxmox.ContainerMigrateOptions) (*proxmox.Task, error)
+	Config(ctx context.Context, options ...proxmox.ContainerOption) (*proxmox.Task, error)
+	Resize(ctx context.Context, disk, size string) (*proxmox.Task, error)
+	AddTag(ctx context.Context, value string) (*proxmox.Task, error)
+	RemoveTag(ctx context.Context, value string) (*proxmox.Task, error)
 }
 
 type ContainerDetails struct {
@@ -78,6 +90,12 @@ type VirtualMachineInterface interface {
 	DeleteSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
 	Pause(ctx context.Context) (*proxmox.Task, error)
 	Resume(ctx context.Context) (*proxmox.Task, error)
+	Migrate(ctx context.Context, options *proxmox.VirtualMachineMigrateOptions) (*proxmox.Task, error)
+	MigratePreconditions(ctx context.Context, target string) (*proxmox.VirtualMachineMigratePreconditions, error)
+	Config(ctx context.Context, options ...proxmox.VirtualMachineOption) (*proxmox.Task, error)
+	ResizeDisk(ctx context.Context, disk, size string) (*proxmox.Task, error)
+	AddTag(ctx context.Context, value string) (*proxmox.Task, error)
+	RemoveTag(ctx context.Context, value string) (*proxmox.Task, error)
 }
 
 type VirtualMachineDetails struct {

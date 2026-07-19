@@ -119,8 +119,29 @@ func (r *RealNode) Storages(ctx context.Context) (proxmox.Storages, error) {
 	return r.node.Storages(ctx)
 }
 
+// RealStorage wraps the actual go-proxmox storage
+type RealStorage struct {
+	storage *proxmox.Storage
+}
+
+func (r *RealNode) Storage(ctx context.Context, name string) (interfaces.StorageInterface, error) {
+	storage, err := r.node.Storage(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &RealStorage{storage: storage}, nil
+}
+
+func (r *RealStorage) GetContent(ctx context.Context) ([]*proxmox.StorageContent, error) {
+	return r.storage.GetContent(ctx)
+}
+
 func (r *RealNode) Tasks(ctx context.Context, options *proxmox.NodeTasksOptions) ([]*proxmox.Task, error) {
 	return r.node.Tasks(ctx, options)
+}
+
+func (r *RealNode) Vzdump(ctx context.Context, options *proxmox.VirtualMachineBackupOptions) (*proxmox.Task, error) {
+	return r.node.Vzdump(ctx, options)
 }
 
 func (r *RealContainer) Start(ctx context.Context) (*proxmox.Task, error) {
@@ -169,6 +190,26 @@ func (r *RealContainer) Suspend(ctx context.Context) (*proxmox.Task, error) {
 
 func (r *RealContainer) Resume(ctx context.Context) (*proxmox.Task, error) {
 	return r.container.Resume(ctx)
+}
+
+func (r *RealContainer) Migrate(ctx context.Context, options *proxmox.ContainerMigrateOptions) (*proxmox.Task, error) {
+	return r.container.Migrate(ctx, options)
+}
+
+func (r *RealContainer) Config(ctx context.Context, options ...proxmox.ContainerOption) (*proxmox.Task, error) {
+	return r.container.Config(ctx, options...)
+}
+
+func (r *RealContainer) Resize(ctx context.Context, disk, size string) (*proxmox.Task, error) {
+	return r.container.Resize(ctx, disk, size)
+}
+
+func (r *RealContainer) AddTag(ctx context.Context, value string) (*proxmox.Task, error) {
+	return r.container.AddTag(ctx, value)
+}
+
+func (r *RealContainer) RemoveTag(ctx context.Context, value string) (*proxmox.Task, error) {
+	return r.container.RemoveTag(ctx, value)
 }
 
 func (r *RealContainer) Details() interfaces.ContainerDetails {
@@ -247,6 +288,30 @@ func (r *RealVirtualMachine) Pause(ctx context.Context) (*proxmox.Task, error) {
 
 func (r *RealVirtualMachine) Resume(ctx context.Context) (*proxmox.Task, error) {
 	return r.vm.Resume(ctx)
+}
+
+func (r *RealVirtualMachine) Migrate(ctx context.Context, options *proxmox.VirtualMachineMigrateOptions) (*proxmox.Task, error) {
+	return r.vm.Migrate(ctx, options)
+}
+
+func (r *RealVirtualMachine) MigratePreconditions(ctx context.Context, target string) (*proxmox.VirtualMachineMigratePreconditions, error) {
+	return r.vm.MigratePreconditions(ctx, target)
+}
+
+func (r *RealVirtualMachine) Config(ctx context.Context, options ...proxmox.VirtualMachineOption) (*proxmox.Task, error) {
+	return r.vm.Config(ctx, options...)
+}
+
+func (r *RealVirtualMachine) ResizeDisk(ctx context.Context, disk, size string) (*proxmox.Task, error) {
+	return r.vm.ResizeDisk(ctx, disk, size)
+}
+
+func (r *RealVirtualMachine) AddTag(ctx context.Context, value string) (*proxmox.Task, error) {
+	return r.vm.AddTag(ctx, value)
+}
+
+func (r *RealVirtualMachine) RemoveTag(ctx context.Context, value string) (*proxmox.Task, error) {
+	return r.vm.RemoveTag(ctx, value)
 }
 
 // Global variable for dependency injection (for testing)
@@ -614,14 +679,23 @@ func WaitForTask(ctx context.Context, task *proxmox.Task, timeout time.Duration)
 	if task == nil {
 		return errors.New("no task returned by Proxmox")
 	}
-	if !task.IsSuccessful && !task.IsFailed {
-		seconds := int(math.Ceil(timeout.Seconds()))
-		if seconds < 1 {
-			seconds = 1
-		}
-		if err := task.WaitFor(ctx, seconds); err != nil {
-			return fmt.Errorf("wait for task %s: %w", task.UPID, err)
-		}
+	if task.IsFailed {
+		return fmt.Errorf("task %s failed: %s", task.UPID, task.ExitStatus)
+	}
+	if task.IsSuccessful {
+		return nil
+	}
+	// Synchronous API responses (e.g. container config updates) carry no
+	// task to poll; the change is already applied.
+	if task.UPID == "" {
+		return nil
+	}
+	seconds := int(math.Ceil(timeout.Seconds()))
+	if seconds < 1 {
+		seconds = 1
+	}
+	if err := task.WaitFor(ctx, seconds); err != nil {
+		return fmt.Errorf("wait for task %s: %w", task.UPID, err)
 	}
 	if !task.IsSuccessful {
 		return fmt.Errorf("task %s failed: %s", task.UPID, task.ExitStatus)

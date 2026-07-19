@@ -27,6 +27,11 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(newSuspendCmd())
 	cmd.AddCommand(newResumeCmd())
 	cmd.AddCommand(newSnapshotCmd())
+	cmd.AddCommand(newCloneCmd())
+	cmd.AddCommand(newMigrateCmd())
+	cmd.AddCommand(newConfigCmd())
+	cmd.AddCommand(newResizeCmd())
+	cmd.AddCommand(newTagsCmd())
 
 	return cmd
 }

@@ -18,7 +18,6 @@ Feature: Node Management
     And I should see memory usage information
     And I should see disk usage information
 
-  @skip
   Scenario: List storage on a node
     Given the CLI is configured and authenticated
     And a node named "pve" exists with configured storage
@@ -26,7 +25,6 @@ Feature: Node Management
     Then I should see a list of all storage on the node
     And I should see storage types and usage
 
-  @skip
   Scenario: List tasks on a node
     Given the CLI is configured and authenticated
     And a node named "pve" has running tasks
@@ -34,7 +32,6 @@ Feature: Node Management
     Then I should see a list of tasks on the node
     And I should see task status and timestamps
 
-  @skip
   Scenario: List only running tasks
     Given the CLI is configured and authenticated
     And a node named "pve" has both running and completed tasks

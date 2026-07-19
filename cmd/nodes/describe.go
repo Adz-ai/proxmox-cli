@@ -132,6 +132,7 @@ func newDescribeCmd() *cobra.Command {
 	if err := cmd.MarkFlagRequired("name"); err != nil {
 		panic(err)
 	}
+	utility.RegisterNodeFlagCompletion(cmd, "name")
 	utility.AddOutputFlag(cmd)
 
 	return cmd

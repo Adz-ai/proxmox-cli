@@ -29,6 +29,14 @@ func newGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			nodeFilter, err := cmd.Flags().GetString("node")
+			if err != nil {
+				return fmt.Errorf("get node flag: %w", err)
+			}
+			statusFilter, err := cmd.Flags().GetString("status")
+			if err != nil {
+				return fmt.Errorf("get status flag: %w", err)
+			}
 			ctx := cmd.Context()
 			client, err := utility.AuthenticatedClient()
 			if err != nil {
@@ -43,6 +51,9 @@ func newGetCmd() *cobra.Command {
 			summaries := []containerSummary{}
 			var nodeErrors []error
 			for _, nodeStatus := range nodes {
+				if nodeFilter != "" && nodeStatus.Node != nodeFilter {
+					continue
+				}
 				node, err := client.Node(ctx, nodeStatus.Node)
 				if err != nil {
 					nodeErrors = append(nodeErrors, fmt.Errorf("get node %q: %w", nodeStatus.Node, err))
@@ -56,6 +67,9 @@ func newGetCmd() *cobra.Command {
 				}
 
 				for _, container := range containers {
+					if statusFilter != "" && container.Status != statusFilter {
+						continue
+					}
 					summaries = append(summaries, containerSummary{
 						Node:   nodeStatus.Node,
 						VMID:   uint64(container.VMID),
@@ -80,6 +94,9 @@ func newGetCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringP("node", "n", "", "Only list containers on this node")
+	cmd.Flags().String("status", "", "Only list containers with this status")
+	utility.RegisterNodeFlagCompletion(cmd, "node")
 	utility.AddOutputFlag(cmd)
 	return cmd
 }

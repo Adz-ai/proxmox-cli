@@ -37,6 +37,7 @@ Get started:
 
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newStatusCmd())
+	cmd.AddCommand(newResourcesCmd())
 	cmd.AddCommand(nodes.NewCmd())
 	cmd.AddCommand(auth.NewCmd())
 	cmd.AddCommand(vm.NewCmd())

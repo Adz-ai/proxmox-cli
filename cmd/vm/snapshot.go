@@ -18,7 +18,98 @@ func newSnapshotCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 	}
 
-	cmd.AddCommand(newSnapshotCreateCmd(), newSnapshotListCmd())
+	cmd.AddCommand(newSnapshotCreateCmd(), newSnapshotListCmd(), newSnapshotRollbackCmd(), newSnapshotDeleteCmd())
+	return cmd
+}
+
+func snapshotNameFromFlags(cmd *cobra.Command) (string, error) {
+	name, err := cmd.Flags().GetString("name")
+	if err != nil {
+		return "", fmt.Errorf("get name flag: %w", err)
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("snapshot name cannot be empty")
+	}
+	return name, nil
+}
+
+func newSnapshotRollbackCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rollback",
+		Short: "Roll back a virtual machine to a snapshot",
+		Long:  `Restore a virtual machine to the state captured in the named snapshot. Changes made since the snapshot are lost.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			ctx := cmd.Context()
+			name, err := snapshotNameFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			vm, id, err := vmFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			task, err := vm.RollbackSnapshot(ctx, name)
+			if err != nil {
+				return fmt.Errorf("roll back VM %d to snapshot %q: %w", id, name, err)
+			}
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				return fmt.Errorf("roll back VM %d to snapshot %q: %w", id, name, err)
+			}
+
+			fmt.Fprintf(out, "VM %d rolled back to snapshot %q successfully\n", id, name)
+			return nil
+		},
+	}
+
+	addVMTargetFlags(cmd)
+	cmd.Flags().String("name", "", "Snapshot name")
+	if err := cmd.MarkFlagRequired("name"); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func newSnapshotDeleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "Delete a snapshot of a virtual machine",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			ctx := cmd.Context()
+			name, err := snapshotNameFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			vm, id, err := vmFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			task, err := vm.DeleteSnapshot(ctx, name)
+			if err != nil {
+				return fmt.Errorf("delete snapshot %q of VM %d: %w", name, id, err)
+			}
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				return fmt.Errorf("delete snapshot %q of VM %d: %w", name, id, err)
+			}
+
+			fmt.Fprintf(out, "Snapshot %q of VM %d deleted successfully\n", name, id)
+			return nil
+		},
+	}
+
+	addVMTargetFlags(cmd)
+	cmd.Flags().String("name", "", "Snapshot name")
+	if err := cmd.MarkFlagRequired("name"); err != nil {
+		panic(err)
+	}
 	return cmd
 }
 

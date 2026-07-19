@@ -85,22 +85,36 @@ when prompted. Tokens do not expire and take precedence over a stored ticket.
     --timeout <duration>  # Maximum time to wait for Proxmox tasks (default 10m)
 ```
 
+### Cluster Overview
+```bash
+proxmox-cli get                     # Every VM, container, and storage in one view
+proxmox-cli get --type vm           # Only VMs (also: lxc, storage)
+proxmox-cli get -n <node>           # Only resources on one node
+proxmox-cli get --status running    # Only running guests
+```
+
 ### Virtual Machine Management
 ```bash
 # List and inspect VMs
 proxmox-cli vm get                  # List all VMs across all nodes
+proxmox-cli vm get -n <node> --status running  # Filter by node and status
 proxmox-cli vm describe -n <node> -i <vmid>  # Show detailed VM information
 
-# VM lifecycle
-proxmox-cli vm create -n <node> -i <vmid> -s <spec.yaml>  # Create VM from YAML
+# VM lifecycle (omit -i on create to auto-assign the next free ID)
+proxmox-cli vm create -n <node> -s <spec.yaml>  # Create VM from YAML
 proxmox-cli vm start -n <node> -i <vmid>     # Start a VM
-proxmox-cli vm stop -n <node> -i <vmid>      # Stop a VM
+proxmox-cli vm shutdown -n <node> -i <vmid>  # Clean, guest-initiated shutdown
+proxmox-cli vm stop -n <node> -i <vmid>      # Hard-stop a VM
 proxmox-cli vm restart -n <node> -i <vmid>   # Restart a VM
+proxmox-cli vm suspend -n <node> -i <vmid>   # Pause, keeping state in memory
+proxmox-cli vm resume -n <node> -i <vmid>    # Resume a suspended VM
 proxmox-cli vm delete -n <node> -i <vmid>    # Delete a VM
 
 # Snapshots
 proxmox-cli vm snapshot create -n <node> -i <vmid> --name <snapshot>
 proxmox-cli vm snapshot list -n <node> -i <vmid>
+proxmox-cli vm snapshot rollback -n <node> -i <vmid> --name <snapshot>
+proxmox-cli vm snapshot delete -n <node> -i <vmid> --name <snapshot>
 ```
 
 ### LXC Container Management
@@ -109,30 +123,42 @@ proxmox-cli vm snapshot list -n <node> -i <vmid>
 proxmox-cli lxc get                 # List all containers across all nodes
 proxmox-cli lxc describe -n <node> -i <ctid>  # Show container details
 
-# Container lifecycle
-proxmox-cli lxc create -n <node> -i <ctid> -s <spec.yaml>  # Create from YAML
+# Container lifecycle (omit -i on create and -t on clone to auto-assign IDs)
+proxmox-cli lxc create -n <node> -s <spec.yaml>  # Create from YAML
 proxmox-cli lxc start -n <node> -i <ctid>     # Start a container
-proxmox-cli lxc stop -n <node> -i <ctid>      # Stop a container
+proxmox-cli lxc shutdown -n <node> -i <ctid>  # Clean shutdown (--force, --grace-seconds)
+proxmox-cli lxc stop -n <node> -i <ctid>      # Hard-stop a container
 proxmox-cli lxc restart -n <node> -i <ctid>   # Restart a container
+proxmox-cli lxc suspend -n <node> -i <ctid>   # Suspend a container
+proxmox-cli lxc resume -n <node> -i <ctid>    # Resume a suspended container
 proxmox-cli lxc delete -n <node> -i <ctid>    # Delete a container
 proxmox-cli lxc delete -n <node> -i <ctid> --force --purge # Force deletion, removing related configuration
 
 # Snapshots and cloning
 proxmox-cli lxc snapshot create -n <node> -i <ctid> --name <snapshot>
 proxmox-cli lxc snapshot list -n <node> -i <ctid>
-proxmox-cli lxc clone -n <node> -s <source> -t <target> --name <name>
+proxmox-cli lxc snapshot rollback -n <node> -i <ctid> --name <snapshot> [--start]
+proxmox-cli lxc snapshot delete -n <node> -i <ctid> --name <snapshot>
+proxmox-cli lxc clone -n <node> -s <source> --name <name>
 ```
 
 ### Node Management
 ```bash
 proxmox-cli nodes get               # List all cluster nodes with status
 proxmox-cli nodes describe -n <node>  # Show detailed node information
-
-# Future node operations (planned)
-# proxmox-cli nodes storage -n <node>     # List storage on node
-# proxmox-cli nodes tasks -n <node>       # List tasks on node
-# proxmox-cli nodes services list -n <node>  # List services on node
+proxmox-cli nodes storage -n <node>   # List storage with type and usage
+proxmox-cli nodes tasks -n <node>     # List recent tasks (-r for running only)
 ```
+
+### Shell Completion
+```bash
+proxmox-cli completion bash > /etc/bash_completion.d/proxmox-cli
+proxmox-cli completion zsh > "${fpath[1]}/_proxmox-cli"
+proxmox-cli completion fish > ~/.config/fish/completions/proxmox-cli.fish
+```
+
+Node-name flags (`-n`) tab-complete live from the cluster when you are
+authenticated.
 
 ## Configuration
 
@@ -264,17 +290,20 @@ proxmox-cli/
 
 ### Implemented Features
 - Session and API token authentication
-- Node listing and detailed information
-- VM operations (list, describe, create, start, stop, restart, delete)
-- LXC operations (list, describe, create, start, stop, restart, delete, clone)
-- VM and LXC snapshots (create, list)
+- Cluster-wide resource overview with type, node, and status filters
+- Node listing, details, storage, and task history
+- VM operations (list, describe, create, start, shutdown, stop, restart, suspend, resume, delete)
+- LXC operations (all of the above plus clone)
+- VM and LXC snapshots (create, list, rollback, delete)
+- Auto-assigned guest IDs on create and clone
+- Shell completion with live node-name lookup
 - JSON output for read commands and configurable task timeouts
 - Nonzero exit statuses for operational failures
 - TLS verification, custom CA support, and private config files
 
 ### In Development
 - VM clone operations
-- Node storage and task management
+- Migration between nodes
 
 ### Planned Features
 - Template management

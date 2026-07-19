@@ -37,16 +37,21 @@ func newCloneCmd() *cobra.Command {
 			if err := validateContainerTarget(nodeName, source); err != nil {
 				return err
 			}
-			if target <= 0 {
+			if target < 0 {
 				return fmt.Errorf("target container ID must be positive")
-			}
-			if target == source {
-				return fmt.Errorf("target container ID must differ from the source")
 			}
 
 			client, err := utility.AuthenticatedClient()
 			if err != nil {
 				return fmt.Errorf("authenticate Proxmox client: %w", err)
+			}
+
+			target, err = utility.ResolveVMID(ctx, client, target)
+			if err != nil {
+				return err
+			}
+			if target == source {
+				return fmt.Errorf("target container ID must differ from the source")
 			}
 
 			node, err := client.Node(ctx, nodeName)
@@ -78,12 +83,13 @@ func newCloneCmd() *cobra.Command {
 
 	cmd.Flags().StringP("node", "n", "", "Node name")
 	cmd.Flags().IntP("source", "s", 0, "Source container ID")
-	cmd.Flags().IntP("target", "t", 0, "New container ID")
+	cmd.Flags().IntP("target", "t", 0, "New container ID (omit to auto-assign the next free ID)")
 	cmd.Flags().String("name", "", "Hostname for the new container")
-	for _, flag := range []string{"node", "source", "target"} {
+	for _, flag := range []string{"node", "source"} {
 		if err := cmd.MarkFlagRequired(flag); err != nil {
 			panic(err)
 		}
 	}
+	utility.RegisterNodeFlagCompletion(cmd, "node")
 	return cmd
 }

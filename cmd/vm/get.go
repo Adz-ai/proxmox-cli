@@ -31,6 +31,15 @@ func newGetCmd() *cobra.Command {
 				return err
 			}
 
+			nodeFilter, err := cmd.Flags().GetString("node")
+			if err != nil {
+				return fmt.Errorf("get node flag: %w", err)
+			}
+			statusFilter, err := cmd.Flags().GetString("status")
+			if err != nil {
+				return fmt.Errorf("get status flag: %w", err)
+			}
+
 			client, err := utility.AuthenticatedClient()
 			if err != nil {
 				return fmt.Errorf("authenticate Proxmox client: %w", err)
@@ -45,6 +54,9 @@ func newGetCmd() *cobra.Command {
 			summaries := []vmSummary{}
 			var nodeErrors []error
 			for _, nodeStatus := range nodes {
+				if nodeFilter != "" && nodeStatus.Node != nodeFilter {
+					continue
+				}
 				node, err := client.Node(ctx, nodeStatus.Node)
 				if err != nil {
 					nodeErrors = append(nodeErrors, fmt.Errorf("get node %q: %w", nodeStatus.Node, err))
@@ -58,6 +70,9 @@ func newGetCmd() *cobra.Command {
 				}
 
 				for _, vm := range vms {
+					if statusFilter != "" && vm.Status != statusFilter {
+						continue
+					}
 					summaries = append(summaries, vmSummary{
 						Node:   nodeStatus.Node,
 						VMID:   uint64(vm.VMID),
@@ -82,6 +97,9 @@ func newGetCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringP("node", "n", "", "Only list VMs on this node")
+	cmd.Flags().String("status", "", "Only list VMs with this status")
+	utility.RegisterNodeFlagCompletion(cmd, "node")
 	utility.AddOutputFlag(cmd)
 	return cmd
 }

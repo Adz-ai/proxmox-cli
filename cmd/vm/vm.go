@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +23,9 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(newStartCmd())
 	cmd.AddCommand(newStopCmd())
 	cmd.AddCommand(newRestartCmd())
+	cmd.AddCommand(newShutdownCmd())
+	cmd.AddCommand(newSuspendCmd())
+	cmd.AddCommand(newResumeCmd())
 	cmd.AddCommand(newSnapshotCmd())
 
 	return cmd
@@ -35,6 +39,7 @@ func addVMTargetFlags(cmd *cobra.Command) {
 			panic(err)
 		}
 	}
+	utility.RegisterNodeFlagCompletion(cmd, "node")
 }
 
 func vmTargetFromFlags(cmd *cobra.Command) (string, int, error) {

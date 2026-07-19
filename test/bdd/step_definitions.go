@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/luthermonson/go-proxmox"
@@ -342,6 +343,37 @@ func (t *TestContext) setupExpectations(parts []string) error {
 					},
 				}
 				t.mockClient.EXPECT().Nodes(ctx).Return(nodes, nil)
+
+			case "storage":
+				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
+				storages := proxmox.Storages{
+					&proxmox.Storage{Name: "local", Type: "dir", Content: "iso,vztmpl,backup", Active: 1, Enabled: 1,
+						Used: 10 * 1024 * 1024 * 1024, Avail: 90 * 1024 * 1024 * 1024, Total: 100 * 1024 * 1024 * 1024, UsedFraction: 0.10},
+					&proxmox.Storage{Name: "local-lvm", Type: "lvmthin", Content: "images,rootdir", Active: 1, Enabled: 1,
+						Used: 50 * 1024 * 1024 * 1024, Avail: 150 * 1024 * 1024 * 1024, Total: 200 * 1024 * 1024 * 1024, UsedFraction: 0.25},
+				}
+				t.mockNode.EXPECT().Storages(ctx).Return(storages, nil)
+
+			case "tasks":
+				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
+				running := &proxmox.Task{
+					UPID: proxmox.UPID("UPID:pve:00001111:00112233:65432100:qmstart:100:root@pam:"),
+					Type: "qmstart", ID: "100", User: "root@pam", Status: "running", IsRunning: true,
+					StartTime: time.Date(2026, 7, 19, 10, 0, 0, 0, time.UTC),
+				}
+				completed := &proxmox.Task{
+					UPID: proxmox.UPID("UPID:pve:00002222:00112233:65432100:vzdump:100:root@pam:"),
+					Type: "vzdump", ID: "100", User: "root@pam", Status: "OK", IsCompleted: true,
+					StartTime: time.Date(2026, 7, 19, 9, 0, 0, 0, time.UTC),
+					EndTime:   time.Date(2026, 7, 19, 9, 30, 0, 0, time.UTC),
+				}
+				t.mockNode.EXPECT().Tasks(ctx, gomock.Any()).DoAndReturn(
+					func(_ context.Context, options *proxmox.NodeTasksOptions) ([]*proxmox.Task, error) {
+						if options != nil && options.Source == "active" {
+							return []*proxmox.Task{running}, nil
+						}
+						return []*proxmox.Task{running, completed}, nil
+					})
 			}
 		}
 
@@ -843,16 +875,25 @@ func (t *TestContext) aNodeExistsWithConfiguredStorage(nodeName string) error {
 }
 
 func (t *TestContext) iShouldSeeListOfStorageOnNode() error {
-	// Storage list not implemented yet, so we'll just check for error message or header
-	output := t.commandOutput.String()
-	if output != "" {
-		return nil
+	if t.commandError != nil {
+		return fmt.Errorf("storage listing failed: %w", t.commandError)
 	}
-	return fmt.Errorf("expected output for storage list")
+	output := t.commandOutput.String()
+	for _, want := range []string{"Storage on node", "local", "local-lvm"} {
+		if !strings.Contains(output, want) {
+			return fmt.Errorf("expected %q in output:\n%s", want, output)
+		}
+	}
+	return nil
 }
 
 func (t *TestContext) iShouldSeeStorageTypesAndUsage() error {
-	// Storage details not implemented yet
+	output := t.commandOutput.String()
+	for _, want := range []string{"dir", "lvmthin", "GiB", "%"} {
+		if !strings.Contains(output, want) {
+			return fmt.Errorf("expected %q in output:\n%s", want, output)
+		}
+	}
 	return nil
 }
 
@@ -862,16 +903,25 @@ func (t *TestContext) aNodeHasRunningTasks(nodeName string) error {
 }
 
 func (t *TestContext) iShouldSeeListOfTasksOnNode() error {
-	// Tasks list not implemented yet
-	output := t.commandOutput.String()
-	if output != "" {
-		return nil
+	if t.commandError != nil {
+		return fmt.Errorf("task listing failed: %w", t.commandError)
 	}
-	return fmt.Errorf("expected output for tasks list")
+	output := t.commandOutput.String()
+	for _, want := range []string{"Tasks on node", "vzdump", "qmstart"} {
+		if !strings.Contains(output, want) {
+			return fmt.Errorf("expected %q in output:\n%s", want, output)
+		}
+	}
+	return nil
 }
 
 func (t *TestContext) iShouldSeeTaskStatusAndTimestamps() error {
-	// Task details not implemented yet
+	output := t.commandOutput.String()
+	for _, want := range []string{"running", "OK", "2026-"} {
+		if !strings.Contains(output, want) {
+			return fmt.Errorf("expected %q in output:\n%s", want, output)
+		}
+	}
 	return nil
 }
 
@@ -881,7 +931,16 @@ func (t *TestContext) aNodeHasBothRunningAndCompletedTasks(nodeName string) erro
 }
 
 func (t *TestContext) iShouldSeeOnlyRunningTasks() error {
-	// Running tasks filter not implemented yet
+	if t.commandError != nil {
+		return fmt.Errorf("task listing failed: %w", t.commandError)
+	}
+	output := t.commandOutput.String()
+	if !strings.Contains(output, "qmstart") {
+		return fmt.Errorf("expected running task in output:\n%s", output)
+	}
+	if strings.Contains(output, "vzdump") {
+		return fmt.Errorf("completed task should be filtered out:\n%s", output)
+	}
 	return nil
 }
 

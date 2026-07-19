@@ -18,7 +18,103 @@ func newSnapshotCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 	}
 
-	cmd.AddCommand(newSnapshotCreateCmd(), newSnapshotListCmd())
+	cmd.AddCommand(newSnapshotCreateCmd(), newSnapshotListCmd(), newSnapshotRollbackCmd(), newSnapshotDeleteCmd())
+	return cmd
+}
+
+func snapshotNameFromFlags(cmd *cobra.Command) (string, error) {
+	name, err := cmd.Flags().GetString("name")
+	if err != nil {
+		return "", fmt.Errorf("get name flag: %w", err)
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("snapshot name cannot be empty")
+	}
+	return name, nil
+}
+
+func newSnapshotRollbackCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rollback",
+		Short: "Roll back an LXC container to a snapshot",
+		Long:  `Restore a container to the state captured in the named snapshot. Changes made since the snapshot are lost.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			ctx := cmd.Context()
+			name, err := snapshotNameFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+			start, err := cmd.Flags().GetBool("start")
+			if err != nil {
+				return fmt.Errorf("read start flag: %w", err)
+			}
+
+			container, vmid, err := containerFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			task, err := container.RollbackSnapshot(ctx, name, start)
+			if err != nil {
+				return fmt.Errorf("roll back container %d to snapshot %q: %w", vmid, name, err)
+			}
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				return fmt.Errorf("roll back container %d to snapshot %q: %w", vmid, name, err)
+			}
+
+			fmt.Fprintf(out, "Container %d rolled back to snapshot %q successfully\n", vmid, name)
+			return nil
+		},
+	}
+
+	addContainerTargetFlags(cmd)
+	cmd.Flags().String("name", "", "Snapshot name")
+	cmd.Flags().Bool("start", false, "Start the container after the rollback")
+	if err := cmd.MarkFlagRequired("name"); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func newSnapshotDeleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "Delete a snapshot of an LXC container",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			ctx := cmd.Context()
+			name, err := snapshotNameFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			container, vmid, err := containerFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			task, err := container.DeleteSnapshot(ctx, name)
+			if err != nil {
+				return fmt.Errorf("delete snapshot %q of container %d: %w", name, vmid, err)
+			}
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
+				return fmt.Errorf("delete snapshot %q of container %d: %w", name, vmid, err)
+			}
+
+			fmt.Fprintf(out, "Snapshot %q of container %d deleted successfully\n", name, vmid)
+			return nil
+		},
+	}
+
+	addContainerTargetFlags(cmd)
+	cmd.Flags().String("name", "", "Snapshot name")
+	if err := cmd.MarkFlagRequired("name"); err != nil {
+		panic(err)
+	}
 	return cmd
 }
 

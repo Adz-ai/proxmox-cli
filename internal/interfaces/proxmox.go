@@ -6,13 +6,20 @@ import (
 	"github.com/luthermonson/go-proxmox"
 )
 
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=../../test/mocks/proxmox_client.go -package=mocks github.com/Adz-ai/proxmox-cli/internal/interfaces ProxmoxClientInterface,NodeInterface,ContainerInterface,VirtualMachineInterface
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=../../test/mocks/proxmox_client.go -package=mocks github.com/Adz-ai/proxmox-cli/internal/interfaces ProxmoxClientInterface,NodeInterface,ContainerInterface,VirtualMachineInterface,ClusterInterface
 
 // ProxmoxClientInterface defines the interface that both real and mock clients must implement
 type ProxmoxClientInterface interface {
 	Nodes(ctx context.Context) (proxmox.NodeStatuses, error)
 	Node(ctx context.Context, nodeName string) (NodeInterface, error)
 	Version(ctx context.Context) (*proxmox.Version, error)
+	Cluster(ctx context.Context) (ClusterInterface, error)
+}
+
+// ClusterInterface defines the interface for cluster-level operations
+type ClusterInterface interface {
+	Resources(ctx context.Context, filters ...string) (proxmox.ClusterResources, error)
+	NextID(ctx context.Context) (int, error)
 }
 
 // NodeInterface defines the interface for node operations
@@ -23,6 +30,8 @@ type NodeInterface interface {
 	VirtualMachine(ctx context.Context, vmid int) (VirtualMachineInterface, error)
 	NewVirtualMachine(ctx context.Context, vmid int, options ...proxmox.VirtualMachineOption) (*proxmox.Task, error)
 	NewContainer(ctx context.Context, vmid int, options ...proxmox.ContainerOption) (*proxmox.Task, error)
+	Storages(ctx context.Context) (proxmox.Storages, error)
+	Tasks(ctx context.Context, options *proxmox.NodeTasksOptions) ([]*proxmox.Task, error)
 }
 
 // ContainerInterface defines the interface for container operations
@@ -36,6 +45,10 @@ type ContainerInterface interface {
 	Clone(ctx context.Context, options *proxmox.ContainerCloneOptions) (int, *proxmox.Task, error)
 	Snapshots(ctx context.Context) ([]*proxmox.ContainerSnapshot, error)
 	NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
+	RollbackSnapshot(ctx context.Context, name string, start bool) (*proxmox.Task, error)
+	DeleteSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
+	Suspend(ctx context.Context) (*proxmox.Task, error)
+	Resume(ctx context.Context) (*proxmox.Task, error)
 }
 
 type ContainerDetails struct {
@@ -61,6 +74,10 @@ type VirtualMachineInterface interface {
 	Clone(ctx context.Context, options *proxmox.VirtualMachineCloneOptions) (int, *proxmox.Task, error)
 	Snapshots(ctx context.Context) ([]*proxmox.VirtualMachineSnapshot, error)
 	NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
+	RollbackSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
+	DeleteSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
+	Pause(ctx context.Context) (*proxmox.Task, error)
+	Resume(ctx context.Context) (*proxmox.Task, error)
 }
 
 type VirtualMachineDetails struct {

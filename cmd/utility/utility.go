@@ -62,6 +62,27 @@ func (r *RealProxmoxClient) Version(ctx context.Context) (*proxmox.Version, erro
 	return r.client.Version(ctx)
 }
 
+// RealCluster wraps the actual go-proxmox cluster
+type RealCluster struct {
+	cluster *proxmox.Cluster
+}
+
+func (r *RealProxmoxClient) Cluster(ctx context.Context) (interfaces.ClusterInterface, error) {
+	cluster, err := r.client.Cluster(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &RealCluster{cluster: cluster}, nil
+}
+
+func (r *RealCluster) Resources(ctx context.Context, filters ...string) (proxmox.ClusterResources, error) {
+	return r.cluster.Resources(ctx, filters...)
+}
+
+func (r *RealCluster) NextID(ctx context.Context) (int, error) {
+	return r.cluster.NextID(ctx)
+}
+
 func (r *RealNode) VirtualMachines(ctx context.Context) (proxmox.VirtualMachines, error) {
 	return r.node.VirtualMachines(ctx)
 }
@@ -94,6 +115,14 @@ func (r *RealNode) NewContainer(ctx context.Context, vmid int, options ...proxmo
 	return r.node.NewContainer(ctx, vmid, options...)
 }
 
+func (r *RealNode) Storages(ctx context.Context) (proxmox.Storages, error) {
+	return r.node.Storages(ctx)
+}
+
+func (r *RealNode) Tasks(ctx context.Context, options *proxmox.NodeTasksOptions) ([]*proxmox.Task, error) {
+	return r.node.Tasks(ctx, options)
+}
+
 func (r *RealContainer) Start(ctx context.Context) (*proxmox.Task, error) {
 	return r.container.Start(ctx)
 }
@@ -124,6 +153,22 @@ func (r *RealContainer) Snapshots(ctx context.Context) ([]*proxmox.ContainerSnap
 
 func (r *RealContainer) NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
 	return r.container.NewSnapshot(ctx, name)
+}
+
+func (r *RealContainer) RollbackSnapshot(ctx context.Context, name string, start bool) (*proxmox.Task, error) {
+	return r.container.Snapshot(name).Rollback(ctx, start)
+}
+
+func (r *RealContainer) DeleteSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
+	return r.container.Snapshot(name).Delete(ctx)
+}
+
+func (r *RealContainer) Suspend(ctx context.Context) (*proxmox.Task, error) {
+	return r.container.Suspend(ctx)
+}
+
+func (r *RealContainer) Resume(ctx context.Context) (*proxmox.Task, error) {
+	return r.container.Resume(ctx)
 }
 
 func (r *RealContainer) Details() interfaces.ContainerDetails {
@@ -186,6 +231,22 @@ func (r *RealVirtualMachine) Snapshots(ctx context.Context) ([]*proxmox.VirtualM
 
 func (r *RealVirtualMachine) NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
 	return r.vm.NewSnapshot(ctx, name)
+}
+
+func (r *RealVirtualMachine) RollbackSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
+	return r.vm.Snapshot(name).Rollback(ctx)
+}
+
+func (r *RealVirtualMachine) DeleteSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
+	return r.vm.Snapshot(name).Delete(ctx)
+}
+
+func (r *RealVirtualMachine) Pause(ctx context.Context) (*proxmox.Task, error) {
+	return r.vm.Pause(ctx)
+}
+
+func (r *RealVirtualMachine) Resume(ctx context.Context) (*proxmox.Task, error) {
+	return r.vm.Resume(ctx)
 }
 
 // Global variable for dependency injection (for testing)
@@ -463,6 +524,52 @@ func WriteConfig() error {
 // AddOutputFlag registers the shared --output flag on a read command.
 func AddOutputFlag(cmd *cobra.Command) {
 	cmd.Flags().StringP("output", "o", "table", "Output format: table or json")
+	_ = cmd.RegisterFlagCompletionFunc("output", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"table", "json"}, cobra.ShellCompDirectiveNoFileComp
+	})
+}
+
+// RegisterNodeFlagCompletion wires dynamic node-name completion for the
+// given flag by querying the cluster. Completion silently degrades when the
+// CLI is not authenticated or the server is unreachable.
+func RegisterNodeFlagCompletion(cmd *cobra.Command, flag string) {
+	_ = cmd.RegisterFlagCompletionFunc(flag, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		client, err := AuthenticatedClient()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
+		defer cancel()
+		nodes, err := client.Nodes(ctx)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names := make([]string, 0, len(nodes))
+		for _, node := range nodes {
+			names = append(names, node.Node)
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+}
+
+// ResolveVMID returns id unchanged when positive, or asks the cluster for
+// the next free guest ID when id is zero.
+func ResolveVMID(ctx context.Context, client interfaces.ProxmoxClientInterface, id int) (int, error) {
+	if id > 0 {
+		return id, nil
+	}
+	if id < 0 {
+		return 0, errors.New("ID must be positive")
+	}
+	cluster, err := client.Cluster(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get cluster: %w", err)
+	}
+	next, err := cluster.NextID(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get next free ID: %w", err)
+	}
+	return next, nil
 }
 
 // OutputFormat validates and returns the shared --output flag.

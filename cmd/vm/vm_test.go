@@ -2,6 +2,8 @@ package vm
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -76,7 +78,8 @@ func TestFormatUptime(t *testing.T) {
 	}
 }
 
-func TestStopCommand(t *testing.T) {
+func setupVMMocks(t *testing.T) (*gomock.Controller, *mocks.MockProxmoxClientInterface) {
+	t.Helper()
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 	viper.Set("server_url", "https://pve.example.com:8006")
@@ -85,6 +88,13 @@ func TestStopCommand(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	client := mocks.NewMockProxmoxClientInterface(ctrl)
+	utility.SetClientFactory(func() interfaces.ProxmoxClientInterface { return client })
+	t.Cleanup(utility.ResetClientFactory)
+	return ctrl, client
+}
+
+func TestStopCommand(t *testing.T) {
+	ctrl, client := setupVMMocks(t)
 	node := mocks.NewMockNodeInterface(ctrl)
 	vm := mocks.NewMockVirtualMachineInterface(ctrl)
 
@@ -92,9 +102,6 @@ func TestStopCommand(t *testing.T) {
 	client.EXPECT().Node(ctx, "pve").Return(node, nil)
 	node.EXPECT().VirtualMachine(ctx, 100).Return(vm, nil)
 	vm.EXPECT().Stop(ctx).Return(&proxmox.Task{IsSuccessful: true}, nil)
-
-	utility.SetClientFactory(func() interfaces.ProxmoxClientInterface { return client })
-	t.Cleanup(utility.ResetClientFactory)
 
 	cmd := NewCmd()
 	var out bytes.Buffer
@@ -106,5 +113,57 @@ func TestStopCommand(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "VM 100 stopped successfully") {
 		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
+func TestSnapshotRollbackCommand(t *testing.T) {
+	ctrl, client := setupVMMocks(t)
+	node := mocks.NewMockNodeInterface(ctrl)
+	vm := mocks.NewMockVirtualMachineInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().VirtualMachine(ctx, 100).Return(vm, nil)
+	vm.EXPECT().RollbackSnapshot(ctx, "nightly").Return(&proxmox.Task{IsSuccessful: true}, nil)
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"snapshot", "rollback", "-n", "pve", "-i", "100", "--name", "nightly"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `VM 100 rolled back to snapshot "nightly" successfully`) {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
+func TestCreateAutoAssignsID(t *testing.T) {
+	ctrl, client := setupVMMocks(t)
+	node := mocks.NewMockNodeInterface(ctrl)
+	cluster := mocks.NewMockClusterInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Cluster(ctx).Return(cluster, nil)
+	cluster.EXPECT().NextID(ctx).Return(105, nil)
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().NewVirtualMachine(ctx, 105, gomock.Any()).Return(&proxmox.Task{IsSuccessful: true}, nil)
+
+	spec := filepath.Join(t.TempDir(), "vm.yaml")
+	if err := os.WriteFile(spec, []byte("memory: 2048\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"create", "-n", "pve", "-s", spec})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Virtual machine 105 created successfully") {
+		t.Fatalf("expected auto-assigned ID in output:\n%s", out.String())
 	}
 }

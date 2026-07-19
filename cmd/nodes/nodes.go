@@ -14,10 +14,8 @@ func NewCmd() *cobra.Command {
 
 	cmd.AddCommand(newGetCmd())
 	cmd.AddCommand(newDescribeCmd())
-	// TODO: Add these commands when we understand the API better
-	// cmd.AddCommand(newStorageCmd())
-	// cmd.AddCommand(newTasksCmd())
-	// cmd.AddCommand(newServicesCmd())
+	cmd.AddCommand(newStorageCmd())
+	cmd.AddCommand(newTasksCmd())
 
 	return cmd
 }

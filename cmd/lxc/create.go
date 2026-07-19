@@ -37,11 +37,18 @@ func newCreateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read spec flag: %w", err)
 			}
-			if err := validateContainerTarget(nodeName, vmid); err != nil {
-				return err
+			if strings.TrimSpace(nodeName) == "" {
+				return fmt.Errorf("node cannot be empty")
+			}
+			if vmid < 0 {
+				return fmt.Errorf("container ID must be positive")
 			}
 			if strings.TrimSpace(specFile) == "" {
 				return fmt.Errorf("spec path cannot be empty")
+			}
+			vmid, err = utility.ResolveVMID(ctx, client, vmid)
+			if err != nil {
+				return err
 			}
 
 			data, err := os.ReadFile(specFile)
@@ -71,19 +78,20 @@ func newCreateCmd() *cobra.Command {
 				return fmt.Errorf("create container %d: %w", vmid, err)
 			}
 
-			fmt.Fprintln(out, "Container created successfully")
+			fmt.Fprintf(out, "Container %d created successfully\n", vmid)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringP("node", "n", "", "Node name")
-	cmd.Flags().IntP("vmid", "i", 0, "Container ID")
+	cmd.Flags().IntP("vmid", "i", 0, "Container ID (omit to auto-assign the next free ID)")
 	cmd.Flags().StringP("spec", "s", "", "YAML specification file")
-	for _, flag := range []string{"node", "vmid", "spec"} {
+	for _, flag := range []string{"node", "spec"} {
 		if err := cmd.MarkFlagRequired(flag); err != nil {
 			panic(err)
 		}
 	}
+	utility.RegisterNodeFlagCompletion(cmd, "node")
 	return cmd
 }
 

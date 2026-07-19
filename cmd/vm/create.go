@@ -42,7 +42,7 @@ func newCreateVMCmd() *cobra.Command {
 			if specFile == "" {
 				return fmt.Errorf("validate spec: spec path cannot be empty")
 			}
-			if id <= 0 {
+			if id < 0 {
 				return fmt.Errorf("validate id: id must be positive")
 			}
 
@@ -56,27 +56,26 @@ func newCreateVMCmd() *cobra.Command {
 				return fmt.Errorf("map VM spec to options: %w", err)
 			}
 
-			if err := createVirtualMachine(cmd.Context(), node, id, vmOptions, utility.TaskTimeout(cmd)); err != nil {
-				return fmt.Errorf("create virtual machine %d on node %q: %w", id, node, err)
+			createdID, err := createVirtualMachine(cmd.Context(), node, id, vmOptions, utility.TaskTimeout(cmd))
+			if err != nil {
+				return fmt.Errorf("create virtual machine on node %q: %w", node, err)
 			}
 
-			fmt.Fprintln(out, "Virtual machine created successfully.")
+			fmt.Fprintf(out, "Virtual machine %d created successfully.\n", createdID)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringP("node", "n", "", "Node to create the virtual machine")
 	cmd.Flags().StringP("spec", "s", "", "Path to the YAML spec file")
-	cmd.Flags().IntP("id", "i", 0, "ID of the virtual machine to be created")
+	cmd.Flags().IntP("id", "i", 0, "ID of the virtual machine (omit to auto-assign the next free ID)")
 	if err := cmd.MarkFlagRequired("node"); err != nil {
 		panic(err)
 	}
 	if err := cmd.MarkFlagRequired("spec"); err != nil {
 		panic(err)
 	}
-	if err := cmd.MarkFlagRequired("id"); err != nil {
-		panic(err)
-	}
+	utility.RegisterNodeFlagCompletion(cmd, "node")
 
 	return cmd
 }
@@ -124,24 +123,29 @@ func mapToVMOptions(spec map[string]interface{}) ([]proxmox.VirtualMachineOption
 	return options, nil
 }
 
-func createVirtualMachine(ctx context.Context, node string, vmID int, options []proxmox.VirtualMachineOption, timeout time.Duration) error {
+func createVirtualMachine(ctx context.Context, node string, vmID int, options []proxmox.VirtualMachineOption, timeout time.Duration) (int, error) {
 	client, err := utility.AuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("authenticate Proxmox client: %w", err)
+		return 0, fmt.Errorf("authenticate Proxmox client: %w", err)
+	}
+
+	vmID, err = utility.ResolveVMID(ctx, client, vmID)
+	if err != nil {
+		return 0, err
 	}
 
 	retrievedNode, err := client.Node(ctx, node)
 	if err != nil {
-		return fmt.Errorf("get node %q: %w", node, err)
+		return 0, fmt.Errorf("get node %q: %w", node, err)
 	}
 
 	task, err := retrievedNode.NewVirtualMachine(ctx, vmID, options...)
 	if err != nil {
-		return fmt.Errorf("start create task: %w", err)
+		return 0, fmt.Errorf("start create task: %w", err)
 	}
 	if err := utility.WaitForTask(ctx, task, timeout); err != nil {
-		return fmt.Errorf("wait for create task: %w", err)
+		return 0, fmt.Errorf("wait for create task: %w", err)
 	}
 
-	return nil
+	return vmID, nil
 }

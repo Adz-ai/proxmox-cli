@@ -19,34 +19,34 @@ func newStatusCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 
-			fmt.Fprintln(out, "🔍 Proxmox CLI Status")
-			fmt.Fprintln(out, "====================")
+			fmt.Fprintln(out, "Proxmox CLI Status")
+			fmt.Fprintln(out, "==================")
 
 			configPath, err := utility.ConfigFile()
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "\n📁 Config file: %s\n", configPath)
+			fmt.Fprintf(out, "\nConfig file: %s\n", configPath)
 
 			// Check server URL
 			serverURL := viper.GetString("server_url")
 			if serverURL == "" {
-				fmt.Fprintln(out, "\n❌ Status: Not configured")
-				fmt.Fprintln(out, "💡 Run 'proxmox-cli init' to configure")
+				fmt.Fprintln(out, "\nStatus: Not configured")
+				fmt.Fprintln(out, "Run 'proxmox-cli init' to configure")
 				return nil
 			}
 
-			fmt.Fprintf(out, "\n🖥️  Server URL: %s\n", serverURL)
+			fmt.Fprintf(out, "\nServer URL: %s\n", serverURL)
 
 			// Check authentication
 			authTicket := viper.Sub("auth_ticket")
 			if authTicket == nil || authTicket.GetString("ticket") == "" {
-				fmt.Fprintln(out, "🔐 Authentication: Not logged in")
-				fmt.Fprintln(out, "💡 Run 'proxmox-cli auth login -u <username>' to authenticate")
+				fmt.Fprintln(out, "Authentication: Not logged in")
+				fmt.Fprintln(out, "Run 'proxmox-cli auth login -u <username>' to authenticate")
 				return nil
 			}
 
-			fmt.Fprintln(out, "🔐 Authentication: Logged in ✓")
+			fmt.Fprintln(out, "Authentication: Logged in")
 
 			// Test connection
 			verbose, err := cmd.Flags().GetBool("verbose")
@@ -54,7 +54,7 @@ func newStatusCmd() *cobra.Command {
 				return err
 			}
 			if verbose {
-				fmt.Fprintln(out, "\n🔄 Testing connection...")
+				fmt.Fprintln(out, "\nTesting connection...")
 
 				client, err := utility.AuthenticatedClient()
 				if err != nil {
@@ -65,30 +65,26 @@ func newStatusCmd() *cobra.Command {
 
 				version, err := client.Version(ctx)
 				if err != nil {
-					fmt.Fprintln(out, "💡 Try running 'proxmox-cli auth login -u <username>' to re-authenticate")
+					fmt.Fprintln(out, "Try running 'proxmox-cli auth login -u <username>' to re-authenticate")
 					return fmt.Errorf("connection failed: %w", err)
 				}
-				fmt.Fprintln(out, "✅ Connection successful!")
-				fmt.Fprintf(out, "📊 Proxmox VE Version: %s\n", version.Version)
-				fmt.Fprintf(out, "📦 Release: %s\n", version.Release)
+				fmt.Fprintln(out, "Connection successful")
+				fmt.Fprintf(out, "Proxmox VE Version: %s\n", version.Version)
+				fmt.Fprintf(out, "Release: %s\n", version.Release)
 
 				nodes, err := client.Nodes(ctx)
 				if err != nil {
 					return fmt.Errorf("fetch cluster nodes: %w", err)
 				}
-				fmt.Fprintf(out, "\n🌐 Cluster nodes: %d\n", len(nodes))
+				fmt.Fprintf(out, "\nCluster nodes: %d\n", len(nodes))
 				for _, node := range nodes {
-					status := "🔴 offline"
-					if node.Status == "online" {
-						status = "🟢 online"
-					}
-					fmt.Fprintf(out, "   - %s %s\n", node.Node, status)
+					fmt.Fprintf(out, "   - %s %s\n", node.Node, node.Status)
 				}
 			} else {
-				fmt.Fprintln(out, "\n💡 Use --verbose to test the connection")
+				fmt.Fprintln(out, "\nUse --verbose to test the connection")
 			}
 
-			fmt.Fprintln(out, "\n📚 Available commands:")
+			fmt.Fprintln(out, "\nAvailable commands:")
 			fmt.Fprintln(out, "   - proxmox-cli nodes get     # List cluster nodes")
 			fmt.Fprintln(out, "   - proxmox-cli vm get        # List virtual machines")
 			fmt.Fprintln(out, "   - proxmox-cli lxc get       # List containers")

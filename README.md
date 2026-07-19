@@ -1,24 +1,24 @@
-# Proxmox CLI 🚀
+# Proxmox CLI
 
 A powerful command-line interface for managing Proxmox Virtual Environment (PVE) resources. Control your virtualization infrastructure from the terminal with ease!
 
-## ✨ Features
+## Features
 
-- **🔐 Secure Authentication**: Verified TLS by default with private session storage
-- **🖥️ Virtual Machine Management**: Create, delete, list, and describe VMs
-- **📦 LXC Container Support**: Create, list, start, stop, and delete containers
-- **🌐 Node Operations**: Monitor and manage cluster nodes
-- **🎯 User-Friendly**: Clear error messages, helpful prompts, and guided setup
-- **⚡ Fast & Efficient**: Direct API communication with Proxmox VE
-- **🧪 Automated Testing**: Unit, mocked CLI, and BDD coverage in CI
+- **Secure Authentication**: Verified TLS by default with private session storage
+- **Virtual Machine Management**: Create, delete, list, and describe VMs
+- **LXC Container Support**: Create, list, start, stop, and delete containers
+- **Node Operations**: Monitor and manage cluster nodes
+- **User-Friendly**: Clear error messages, helpful prompts, and guided setup
+- **Fast & Efficient**: Direct API communication with Proxmox VE
+- **Automated Testing**: Unit, mocked CLI, and BDD coverage in CI
 
-## 📋 Requirements
+## Requirements
 
 - Go 1.26+ (for building from source)
 - Proxmox VE 6.0+ server
 - Network access to Proxmox API (usually port 8006)
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -58,7 +58,7 @@ proxmox-cli vm get
 proxmox-cli lxc get
 ```
 
-## 📚 Commands Reference
+## Commands Reference
 
 ### Authentication & Setup
 ```bash
@@ -111,7 +111,7 @@ proxmox-cli nodes describe -n <node>  # Show detailed node information
 # proxmox-cli nodes services list -n <node>  # List services on node
 ```
 
-## 🔧 Configuration
+## Configuration
 
 Configuration is stored in `~/.proxmox-cli/config.json`
 
@@ -136,7 +136,7 @@ proxmox-cli init              # Interactive setup
 proxmox-cli init --force      # Reconfigure existing
 ```
 
-## 📝 Creating Resources from YAML
+## Creating Resources from YAML
 
 ### VM Specification
 ```yaml
@@ -175,7 +175,7 @@ unprivileged: 1
 proxmox-cli lxc create -n node1 -i 200 -s lxc-spec.yaml
 ```
 
-## 🧪 Development & Testing
+## Development & Testing
 
 ### Running Tests
 ```bash
@@ -230,9 +230,9 @@ proxmox-cli/
 └── main.go               # CLI entry point
 ```
 
-## 🚦 Status & Roadmap
+## Status & Roadmap
 
-### ✅ Implemented Features
+### Implemented Features
 - Authentication and session management
 - Node listing and detailed information
 - VM operations (list, describe, create, delete)
@@ -240,12 +240,12 @@ proxmox-cli/
 - Nonzero exit statuses for operational failures
 - TLS verification, custom CA support, and private config files
 
-### 🔄 In Development
+### In Development
 - LXC advanced operations (clone, snapshots)
 - Node storage and task management
 - VM advanced operations (start, stop, snapshots)
 
-### 📋 Planned Features
+### Planned Features
 - Template management
 - Network configuration
 - Storage management
@@ -253,7 +253,7 @@ proxmox-cli/
 - Bulk operations
 - Configuration profiles
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please:
 
@@ -271,11 +271,11 @@ Contributions are welcome! Please:
 - Update documentation for new functionality
 - Ensure all tests pass before submitting
 
-## 📄 License
+## License
 
 This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built with [Cobra](https://github.com/spf13/cobra) for CLI framework
 - Uses [go-proxmox](https://github.com/luthermonson/go-proxmox) for Proxmox API
@@ -283,7 +283,7 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 - Mocking with [GoMock](https://github.com/uber-go/mock) for reliable tests
 - Inspired by the need for better Proxmox CLI tools
 
-## 📞 Support
+## Support
 
 If you encounter issues or have questions:
 1. Check the [Issues](https://github.com/Adz-ai/proxmox-cli/issues) page
@@ -292,4 +292,4 @@ If you encounter issues or have questions:
 
 ---
 
-**Happy Proxmox management!** 🎉
+**Happy Proxmox management!**

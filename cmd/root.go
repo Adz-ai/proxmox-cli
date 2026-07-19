@@ -16,13 +16,13 @@ func NewRootCmd() *cobra.Command {
 		Use:          "proxmox-cli",
 		Short:        "Command-line interface for Proxmox VE",
 		SilenceUsage: true,
-		Long: `🚀 Proxmox CLI - Manage your Proxmox Virtual Environment from the terminal
+		Long: `Proxmox CLI - Manage your Proxmox Virtual Environment from the terminal
 
-A powerful command-line tool for managing Proxmox VE resources including:
-• Virtual Machines (VMs)
-• LXC Containers
-• Cluster Nodes
-• Storage and Networks
+A command-line tool for managing Proxmox VE resources including:
+- Virtual Machines (VMs)
+- LXC Containers
+- Cluster Nodes
+- Storage and Networks
 
 Get started:
   proxmox-cli init                    # Configure connection

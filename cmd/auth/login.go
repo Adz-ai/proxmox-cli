@@ -79,7 +79,7 @@ func authenticateWithProxmox(ctx context.Context, cmd *cobra.Command, username, 
 	configuredURL := serverURL
 	if serverURL == "" {
 		reader := bufio.NewReader(in)
-		fmt.Fprintln(out, "🔧 Proxmox server URL not configured.")
+		fmt.Fprintln(out, "Proxmox server URL not configured.")
 		fmt.Fprint(out, "Enter Proxmox server URL (e.g., https://192.168.1.100:8006): ")
 
 		var err error
@@ -98,10 +98,10 @@ func authenticateWithProxmox(ctx context.Context, cmd *cobra.Command, username, 
 		if err := utility.WriteConfig(); err != nil {
 			return fmt.Errorf("save server URL: %w", err)
 		}
-		fmt.Fprintln(out, "✅ Server URL saved to configuration")
+		fmt.Fprintln(out, "Server URL saved to configuration")
 	}
 
-	fmt.Fprintf(out, "🔐 Authenticating with Proxmox server at %s...\n", serverURL)
+	fmt.Fprintf(out, "Authenticating with Proxmox server at %s...\n", serverURL)
 
 	httpClient, err := utility.NewHTTPClient(viper.GetBool("insecure"), viper.GetString("ca_cert"))
 	if err != nil {
@@ -131,9 +131,9 @@ func authenticateWithProxmox(ctx context.Context, cmd *cobra.Command, username, 
 		return fmt.Errorf("save authentication: %w", err)
 	}
 
-	fmt.Fprintln(out, "✅ Authentication successful!")
-	fmt.Fprintf(out, "📊 Connected to Proxmox VE %s\n", version.Version)
-	fmt.Fprintln(out, "\n🎯 You can now use commands like:")
+	fmt.Fprintln(out, "Authentication successful")
+	fmt.Fprintf(out, "Connected to Proxmox VE %s\n", version.Version)
+	fmt.Fprintln(out, "\nYou can now use commands like:")
 	fmt.Fprintln(out, "  - proxmox-cli nodes get")
 	fmt.Fprintln(out, "  - proxmox-cli vm get")
 	fmt.Fprintln(out, "  - proxmox-cli lxc get")

@@ -33,6 +33,9 @@ func NewCmd() *cobra.Command {
 		newConfigCmd(),
 		newResizeCmd(),
 		newTagsCmd(),
+		newIPCmd(),
+		newStatsCmd(),
+		newConsoleCmd(),
 	)
 	return cmd
 }

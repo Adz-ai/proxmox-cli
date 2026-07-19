@@ -34,6 +34,11 @@ type NodeInterface interface {
 	Storage(ctx context.Context, name string) (StorageInterface, error)
 	Tasks(ctx context.Context, options *proxmox.NodeTasksOptions) ([]*proxmox.Task, error)
 	Vzdump(ctx context.Context, options *proxmox.VirtualMachineBackupOptions) (*proxmox.Task, error)
+	Appliances(ctx context.Context) (proxmox.Appliances, error)
+	DownloadAppliance(ctx context.Context, template, storage string) (string, error)
+	VzTmpls(ctx context.Context, storage string) (proxmox.VzTmpls, error)
+	StorageDownloadURL(ctx context.Context, options *proxmox.StorageDownloadURLOptions) (string, error)
+	RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error)
 }
 
 // StorageInterface defines the interface for storage operations
@@ -61,6 +66,10 @@ type ContainerInterface interface {
 	Resize(ctx context.Context, disk, size string) (*proxmox.Task, error)
 	AddTag(ctx context.Context, value string) (*proxmox.Task, error)
 	RemoveTag(ctx context.Context, value string) (*proxmox.Task, error)
+	Interfaces(ctx context.Context) (proxmox.ContainerInterfaces, error)
+	RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf ...proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error)
+	TermProxy(ctx context.Context) (*proxmox.Term, error)
+	TermWebSocket(term *proxmox.Term) (chan []byte, chan []byte, chan error, func() error, error)
 }
 
 type ContainerDetails struct {
@@ -96,6 +105,13 @@ type VirtualMachineInterface interface {
 	ResizeDisk(ctx context.Context, disk, size string) (*proxmox.Task, error)
 	AddTag(ctx context.Context, value string) (*proxmox.Task, error)
 	RemoveTag(ctx context.Context, value string) (*proxmox.Task, error)
+	WaitForAgent(ctx context.Context, seconds int) error
+	AgentExec(ctx context.Context, command []string, inputData string) (int, error)
+	WaitForAgentExecExit(ctx context.Context, pid, seconds int) (*proxmox.AgentExecStatus, error)
+	AgentGetNetworkIFaces(ctx context.Context) ([]*proxmox.AgentNetworkIface, error)
+	RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf ...proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error)
+	TermProxy(ctx context.Context) (*proxmox.Term, error)
+	TermWebSocket(term *proxmox.Term) (chan []byte, chan []byte, chan error, func() error, error)
 }
 
 type VirtualMachineDetails struct {

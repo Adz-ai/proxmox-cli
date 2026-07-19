@@ -3,6 +3,7 @@ package utility
 import (
 	"context"
 	"crypto/tls"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -300,6 +301,37 @@ func TestWaitForCompletedTask(t *testing.T) {
 	// nothing to poll and the operation already succeeded.
 	if err := WaitForTask(context.Background(), &proxmox.Task{}, time.Second); err != nil {
 		t.Fatalf("synchronous response should succeed, got %v", err)
+	}
+}
+
+func TestSummarizeRRDSkipsNaNSamples(t *testing.T) {
+	nan := math.NaN()
+	summary := SummarizeRRD("hour", []*proxmox.RRDData{
+		{Time: 1, CPU: 0.20, Mem: 2 << 30, MaxMem: 4 << 30, NetIn: 1024},
+		{Time: 2, CPU: nan, Mem: nan},
+		{Time: 3, CPU: 0.40, Mem: 3 << 30, MaxMem: 4 << 30, NetIn: 3072},
+		nil,
+	})
+	if summary.Samples != 2 {
+		t.Fatalf("samples = %d, want 2 (NaN and nil skipped)", summary.Samples)
+	}
+	if summary.PeakCPU != 40 || summary.AverageCPU != 30 {
+		t.Fatalf("cpu peak/avg = %.1f/%.1f, want 40/30", summary.PeakCPU, summary.AverageCPU)
+	}
+	if summary.LatestMemory != 3<<30 || summary.MaxMemory != 4<<30 {
+		t.Fatalf("memory latest/max = %d/%d", summary.LatestMemory, summary.MaxMemory)
+	}
+	if summary.AverageNetIn != 2048 {
+		t.Fatalf("avg net in = %.0f, want 2048", summary.AverageNetIn)
+	}
+}
+
+func TestParseTimeframe(t *testing.T) {
+	if _, err := ParseTimeframe("day"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseTimeframe("fortnight"); err == nil {
+		t.Fatal("expected error for unsupported timeframe")
 	}
 }
 

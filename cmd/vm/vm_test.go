@@ -255,6 +255,132 @@ func TestConfigSetCommand(t *testing.T) {
 	}
 }
 
+func TestExecCommand(t *testing.T) {
+	ctrl, client := setupVMMocks(t)
+	node := mocks.NewMockNodeInterface(ctrl)
+	vm := mocks.NewMockVirtualMachineInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().VirtualMachine(ctx, 100).Return(vm, nil)
+	vm.EXPECT().WaitForAgent(ctx, 15).Return(nil)
+	vm.EXPECT().AgentExec(ctx, []string{"uname", "-a"}, "").Return(1234, nil)
+	vm.EXPECT().WaitForAgentExecExit(ctx, 1234, gomock.Any()).Return(
+		&proxmox.AgentExecStatus{Exited: 1, ExitCode: 0, OutData: "Linux vm 6.1.0\n"}, nil)
+
+	cmd := NewCmd()
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"exec", "-n", "pve", "-i", "100", "--", "uname", "-a"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Linux vm 6.1.0") {
+		t.Fatalf("expected command output:\n%s", out.String())
+	}
+}
+
+func TestExecCommandNonZeroExit(t *testing.T) {
+	ctrl, client := setupVMMocks(t)
+	node := mocks.NewMockNodeInterface(ctrl)
+	vm := mocks.NewMockVirtualMachineInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().VirtualMachine(ctx, 100).Return(vm, nil)
+	vm.EXPECT().WaitForAgent(ctx, 15).Return(nil)
+	vm.EXPECT().AgentExec(ctx, []string{"false"}, "").Return(99, nil)
+	vm.EXPECT().WaitForAgentExecExit(ctx, 99, gomock.Any()).Return(
+		&proxmox.AgentExecStatus{Exited: 1, ExitCode: 1, ErrData: "boom\n"}, nil)
+
+	cmd := NewCmd()
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"exec", "-n", "pve", "-i", "100", "--", "false"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "exited with code 1") {
+		t.Fatalf("expected exit-code error, got %v", err)
+	}
+	if !strings.Contains(errOut.String(), "boom") {
+		t.Fatalf("expected stderr forwarded:\n%s", errOut.String())
+	}
+}
+
+func TestIPCommandJSON(t *testing.T) {
+	ctrl, client := setupVMMocks(t)
+	node := mocks.NewMockNodeInterface(ctrl)
+	vm := mocks.NewMockVirtualMachineInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().VirtualMachine(ctx, 100).Return(vm, nil)
+	vm.EXPECT().AgentGetNetworkIFaces(ctx).Return([]*proxmox.AgentNetworkIface{
+		{Name: "eth0", HardwareAddress: "aa:bb:cc:dd:ee:ff", IPAddresses: []*proxmox.AgentNetworkIPAddress{
+			{IPAddressType: "ipv4", IPAddress: "192.168.1.50", Prefix: 24},
+		}},
+	}, nil)
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"ip", "-n", "pve", "-i", "100", "-o", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"192.168.1.50/24"`) {
+		t.Fatalf("expected address in JSON output:\n%s", out.String())
+	}
+}
+
+func TestStatsCommand(t *testing.T) {
+	ctrl, client := setupVMMocks(t)
+	node := mocks.NewMockNodeInterface(ctrl)
+	vm := mocks.NewMockVirtualMachineInterface(ctrl)
+
+	ctx := gomock.Any()
+	client.EXPECT().Node(ctx, "pve").Return(node, nil)
+	node.EXPECT().VirtualMachine(ctx, 100).Return(vm, nil)
+	vm.EXPECT().RRDData(ctx, proxmox.TimeframeHour).Return([]*proxmox.RRDData{
+		{Time: 1, CPU: 0.10, Mem: 1 << 30, MaxMem: 4 << 30},
+		{Time: 2, CPU: 0.30, Mem: 2 << 30, MaxMem: 4 << 30},
+	}, nil)
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"stats", "-n", "pve", "-i", "100"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Samples: 2", "peak 30.0%", "/ 4.00 GiB"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("expected %q in output:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestConsoleRequiresSessionTicket(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("server_url", "https://pve.example.com:8006")
+	viper.Set("api_token.token_id", "root@pam!ci")
+	viper.Set("api_token.secret", "secret")
+
+	cmd := NewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"console", "-n", "pve", "-i", "100"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "API tokens cannot open websockets") {
+		t.Fatalf("expected session-ticket requirement error, got %v", err)
+	}
+}
+
 func TestCreateAutoAssignsID(t *testing.T) {
 	ctrl, client := setupVMMocks(t)
 	node := mocks.NewMockNodeInterface(ctrl)

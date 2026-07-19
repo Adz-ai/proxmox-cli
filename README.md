@@ -124,6 +124,12 @@ proxmox-cli vm migrate -n <node> -i <vmid> --target <node> [--online] [--with-lo
 proxmox-cli vm config set -n <node> -i <vmid> memory=4096 cores=4
 proxmox-cli vm resize -n <node> -i <vmid> --disk scsi0 --size +10G
 proxmox-cli vm tags -n <node> -i <vmid> --add web --remove old
+
+# Guest agent, stats, and console
+proxmox-cli vm exec -n <node> -i <vmid> -- uname -a   # Run a command in the guest
+proxmox-cli vm ip -n <node> -i <vmid>                 # Show guest IP addresses
+proxmox-cli vm stats -n <node> -i <vmid> [--timeframe hour|day|week|month|year]
+proxmox-cli vm console -n <node> -i <vmid>            # Interactive console (Ctrl+] to exit)
 ```
 
 ### LXC Container Management
@@ -155,7 +161,25 @@ proxmox-cli lxc migrate -n <node> -i <ctid> --target <node> [--restart]
 proxmox-cli lxc config set -n <node> -i <ctid> memory=2048 swap=512
 proxmox-cli lxc resize -n <node> -i <ctid> --disk rootfs --size +2G
 proxmox-cli lxc tags -n <node> -i <ctid> --add web --remove old
+
+# Networking, stats, and console
+proxmox-cli lxc ip -n <node> -i <ctid>                # Show container IP addresses
+proxmox-cli lxc stats -n <node> -i <ctid> [--timeframe hour|day|week|month|year]
+proxmox-cli lxc console -n <node> -i <ctid>           # Interactive console (Ctrl+] to exit)
 ```
+
+### Templates & ISO Images
+```bash
+proxmox-cli template available -n <node>              # Templates downloadable from the appliance index
+proxmox-cli template list -n <node> --storage <s>     # Downloaded templates
+proxmox-cli template download -n <node> --storage <s> --template <name>
+proxmox-cli iso list -n <node> --storage <s>
+proxmox-cli iso download -n <node> --storage <s> --url <url> --filename <name>
+```
+
+Console access requires a password login (`auth login`); Proxmox does not
+allow API tokens to open console websockets. `vm exec` and `vm ip` need the
+QEMU guest agent installed and running inside the VM.
 
 ### Backup & Restore
 ```bash
@@ -175,6 +199,7 @@ proxmox-cli nodes get               # List all cluster nodes with status
 proxmox-cli nodes describe -n <node>  # Show detailed node information
 proxmox-cli nodes storage -n <node>   # List storage with type and usage
 proxmox-cli nodes tasks -n <node>     # List recent tasks (-r for running only)
+proxmox-cli nodes stats -n <node>     # Node resource usage over a timeframe
 ```
 
 ### Shell Completion
@@ -324,6 +349,10 @@ proxmox-cli/
 - VM and LXC snapshots (create, list, rollback, delete)
 - Backups: vzdump create, list, and restore with guest-type detection
 - Configuration editing, disk resize, and tag management
+- Guest agent integration: vm exec and IP discovery
+- Interactive consoles for VMs and containers
+- Resource stats for nodes, VMs, and containers (RRD-based)
+- LXC template and ISO image management with server-side downloads
 - Auto-assigned guest IDs on create and clone
 - Shell completion with live node-name lookup
 - JSON output for read commands and configurable task timeouts
@@ -331,10 +360,10 @@ proxmox-cli/
 - TLS verification, custom CA support, and private config files
 
 ### Planned Features
-- Guest agent commands (exec, IP discovery)
-- Interactive console access
-- Template and ISO management
-- Metrics and monitoring views
+- Multi-cluster configuration profiles
+- Firewall rule management
+- User, group, and ACL administration
+- HA resource management
 - Bulk operations
 - Configuration profiles
 

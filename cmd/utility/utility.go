@@ -144,6 +144,26 @@ func (r *RealNode) Vzdump(ctx context.Context, options *proxmox.VirtualMachineBa
 	return r.node.Vzdump(ctx, options)
 }
 
+func (r *RealNode) Appliances(ctx context.Context) (proxmox.Appliances, error) {
+	return r.node.Appliances(ctx)
+}
+
+func (r *RealNode) DownloadAppliance(ctx context.Context, template, storage string) (string, error) {
+	return r.node.DownloadAppliance(ctx, template, storage)
+}
+
+func (r *RealNode) VzTmpls(ctx context.Context, storage string) (proxmox.VzTmpls, error) {
+	return r.node.VzTmpls(ctx, storage)
+}
+
+func (r *RealNode) StorageDownloadURL(ctx context.Context, options *proxmox.StorageDownloadURLOptions) (string, error) {
+	return r.node.StorageDownloadURL(ctx, options)
+}
+
+func (r *RealNode) RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error) {
+	return r.node.RRDData(ctx, timeframe, cf)
+}
+
 func (r *RealContainer) Start(ctx context.Context) (*proxmox.Task, error) {
 	return r.container.Start(ctx)
 }
@@ -210,6 +230,22 @@ func (r *RealContainer) AddTag(ctx context.Context, value string) (*proxmox.Task
 
 func (r *RealContainer) RemoveTag(ctx context.Context, value string) (*proxmox.Task, error) {
 	return r.container.RemoveTag(ctx, value)
+}
+
+func (r *RealContainer) Interfaces(ctx context.Context) (proxmox.ContainerInterfaces, error) {
+	return r.container.Interfaces(ctx)
+}
+
+func (r *RealContainer) RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf ...proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error) {
+	return r.container.RRDData(ctx, timeframe, cf...)
+}
+
+func (r *RealContainer) TermProxy(ctx context.Context) (*proxmox.Term, error) {
+	return r.container.TermProxy(ctx)
+}
+
+func (r *RealContainer) TermWebSocket(term *proxmox.Term) (chan []byte, chan []byte, chan error, func() error, error) {
+	return r.container.TermWebSocket(term)
 }
 
 func (r *RealContainer) Details() interfaces.ContainerDetails {
@@ -312,6 +348,34 @@ func (r *RealVirtualMachine) AddTag(ctx context.Context, value string) (*proxmox
 
 func (r *RealVirtualMachine) RemoveTag(ctx context.Context, value string) (*proxmox.Task, error) {
 	return r.vm.RemoveTag(ctx, value)
+}
+
+func (r *RealVirtualMachine) WaitForAgent(ctx context.Context, seconds int) error {
+	return r.vm.WaitForAgent(ctx, seconds)
+}
+
+func (r *RealVirtualMachine) AgentExec(ctx context.Context, command []string, inputData string) (int, error) {
+	return r.vm.AgentExec(ctx, command, inputData)
+}
+
+func (r *RealVirtualMachine) WaitForAgentExecExit(ctx context.Context, pid, seconds int) (*proxmox.AgentExecStatus, error) {
+	return r.vm.WaitForAgentExecExit(ctx, pid, seconds)
+}
+
+func (r *RealVirtualMachine) AgentGetNetworkIFaces(ctx context.Context) ([]*proxmox.AgentNetworkIface, error) {
+	return r.vm.AgentGetNetworkIFaces(ctx)
+}
+
+func (r *RealVirtualMachine) RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf ...proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error) {
+	return r.vm.RRDData(ctx, timeframe, cf...)
+}
+
+func (r *RealVirtualMachine) TermProxy(ctx context.Context) (*proxmox.Term, error) {
+	return r.vm.TermProxy(ctx)
+}
+
+func (r *RealVirtualMachine) TermWebSocket(term *proxmox.Term) (chan []byte, chan []byte, chan error, func() error, error) {
+	return r.vm.TermWebSocket(term)
 }
 
 // Global variable for dependency injection (for testing)
@@ -659,6 +723,114 @@ func PrintJSON(out io.Writer, v any) error {
 		return fmt.Errorf("encode JSON output: %w", err)
 	}
 	return nil
+}
+
+// RRDSummary condenses a series of RRD samples into latest/average/peak
+// figures for display.
+type RRDSummary struct {
+	Timeframe        string  `json:"timeframe"`
+	Samples          int     `json:"samples"`
+	LatestCPU        float64 `json:"latest_cpu_percent"`
+	AverageCPU       float64 `json:"average_cpu_percent"`
+	PeakCPU          float64 `json:"peak_cpu_percent"`
+	LatestMemory     uint64  `json:"latest_memory_bytes"`
+	AverageMemory    uint64  `json:"average_memory_bytes"`
+	PeakMemory       uint64  `json:"peak_memory_bytes"`
+	MaxMemory        uint64  `json:"max_memory_bytes,omitempty"`
+	AverageNetIn     float64 `json:"average_net_in_bps"`
+	AverageNetOut    float64 `json:"average_net_out_bps"`
+	AverageDiskRead  float64 `json:"average_disk_read_bps"`
+	AverageDiskWrite float64 `json:"average_disk_write_bps"`
+}
+
+// SummarizeRRD aggregates RRD samples, skipping gaps the RRD reports as NaN.
+func SummarizeRRD(timeframe string, samples []*proxmox.RRDData) RRDSummary {
+	summary := RRDSummary{Timeframe: timeframe}
+	var cpuSum, memSum, netInSum, netOutSum, diskReadSum, diskWriteSum float64
+	for _, sample := range samples {
+		if sample == nil || math.IsNaN(sample.CPU) || math.IsNaN(sample.Mem) {
+			continue
+		}
+		summary.Samples++
+		cpu := sample.CPU * 100
+		cpuSum += cpu
+		memSum += sample.Mem
+		if !math.IsNaN(sample.NetIn) {
+			netInSum += sample.NetIn
+		}
+		if !math.IsNaN(sample.NetOut) {
+			netOutSum += sample.NetOut
+		}
+		if !math.IsNaN(sample.DiskRead) {
+			diskReadSum += sample.DiskRead
+		}
+		if !math.IsNaN(sample.DiskWrite) {
+			diskWriteSum += sample.DiskWrite
+		}
+		if cpu > summary.PeakCPU {
+			summary.PeakCPU = cpu
+		}
+		if uint64(sample.Mem) > summary.PeakMemory {
+			summary.PeakMemory = uint64(sample.Mem)
+		}
+		summary.LatestCPU = cpu
+		summary.LatestMemory = uint64(sample.Mem)
+		if sample.MaxMem > 0 {
+			summary.MaxMemory = sample.MaxMem
+		}
+	}
+	if summary.Samples > 0 {
+		count := float64(summary.Samples)
+		summary.AverageCPU = cpuSum / count
+		summary.AverageMemory = uint64(memSum / count)
+		summary.AverageNetIn = netInSum / count
+		summary.AverageNetOut = netOutSum / count
+		summary.AverageDiskRead = diskReadSum / count
+		summary.AverageDiskWrite = diskWriteSum / count
+	}
+	return summary
+}
+
+// PrintRRDSummary renders an RRD summary as a small table.
+func PrintRRDSummary(out io.Writer, subject string, summary RRDSummary) {
+	const gib = 1024 * 1024 * 1024
+	const mib = 1024 * 1024
+	fmt.Fprintf(out, "Stats for %s (%s):\n", subject, summary.Timeframe)
+	fmt.Fprintf(out, "Samples: %d\n", summary.Samples)
+	if summary.Samples == 0 {
+		fmt.Fprintln(out, "No data available for this timeframe")
+		return
+	}
+	fmt.Fprintf(out, "CPU:    latest %.1f%%   avg %.1f%%   peak %.1f%%\n",
+		summary.LatestCPU, summary.AverageCPU, summary.PeakCPU)
+	memory := fmt.Sprintf("Memory: latest %.2f GiB   avg %.2f GiB   peak %.2f GiB",
+		float64(summary.LatestMemory)/gib, float64(summary.AverageMemory)/gib, float64(summary.PeakMemory)/gib)
+	if summary.MaxMemory > 0 {
+		memory += fmt.Sprintf(" / %.2f GiB", float64(summary.MaxMemory)/gib)
+	}
+	fmt.Fprintln(out, memory)
+	fmt.Fprintf(out, "Net:    in %.2f MiB/s   out %.2f MiB/s (avg)\n",
+		summary.AverageNetIn/mib, summary.AverageNetOut/mib)
+	fmt.Fprintf(out, "Disk:   read %.2f MiB/s   write %.2f MiB/s (avg)\n",
+		summary.AverageDiskRead/mib, summary.AverageDiskWrite/mib)
+}
+
+// ParseTimeframe validates the shared --timeframe flag value.
+func ParseTimeframe(value string) (proxmox.Timeframe, error) {
+	switch value {
+	case "hour", "day", "week", "month", "year":
+		return proxmox.Timeframe(value), nil
+	default:
+		return "", fmt.Errorf("unsupported timeframe %q; use hour, day, week, month, or year", value)
+	}
+}
+
+// AddTimeframeFlag registers the shared --timeframe flag on a stats command.
+func AddTimeframeFlag(cmd *cobra.Command) {
+	cmd.Flags().String("timeframe", "hour", "Sampling window: hour, day, week, month, or year")
+	_ = cmd.RegisterFlagCompletionFunc("timeframe", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"hour", "day", "week", "month", "year"}, cobra.ShellCompDirectiveNoFileComp
+	})
 }
 
 // DefaultTaskTimeout bounds how long commands wait for a Proxmox task when

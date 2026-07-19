@@ -126,6 +126,21 @@ func (m *MockNodeInterface) EXPECT() *MockNodeInterfaceMockRecorder {
 	return m.recorder
 }
 
+// Appliances mocks base method.
+func (m *MockNodeInterface) Appliances(ctx context.Context) (proxmox.Appliances, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Appliances", ctx)
+	ret0, _ := ret[0].(proxmox.Appliances)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Appliances indicates an expected call of Appliances.
+func (mr *MockNodeInterfaceMockRecorder) Appliances(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Appliances", reflect.TypeOf((*MockNodeInterface)(nil).Appliances), ctx)
+}
+
 // Container mocks base method.
 func (m *MockNodeInterface) Container(ctx context.Context, vmid int) (interfaces.ContainerInterface, error) {
 	m.ctrl.T.Helper()
@@ -154,6 +169,21 @@ func (m *MockNodeInterface) Containers(ctx context.Context) (proxmox.Containers,
 func (mr *MockNodeInterfaceMockRecorder) Containers(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Containers", reflect.TypeOf((*MockNodeInterface)(nil).Containers), ctx)
+}
+
+// DownloadAppliance mocks base method.
+func (m *MockNodeInterface) DownloadAppliance(ctx context.Context, template, storage string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DownloadAppliance", ctx, template, storage)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DownloadAppliance indicates an expected call of DownloadAppliance.
+func (mr *MockNodeInterfaceMockRecorder) DownloadAppliance(ctx, template, storage any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadAppliance", reflect.TypeOf((*MockNodeInterface)(nil).DownloadAppliance), ctx, template, storage)
 }
 
 // NewContainer mocks base method.
@@ -196,6 +226,21 @@ func (mr *MockNodeInterfaceMockRecorder) NewVirtualMachine(ctx, vmid any, option
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewVirtualMachine", reflect.TypeOf((*MockNodeInterface)(nil).NewVirtualMachine), varargs...)
 }
 
+// RRDData mocks base method.
+func (m *MockNodeInterface) RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RRDData", ctx, timeframe, cf)
+	ret0, _ := ret[0].([]*proxmox.RRDData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RRDData indicates an expected call of RRDData.
+func (mr *MockNodeInterfaceMockRecorder) RRDData(ctx, timeframe, cf any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RRDData", reflect.TypeOf((*MockNodeInterface)(nil).RRDData), ctx, timeframe, cf)
+}
+
 // Storage mocks base method.
 func (m *MockNodeInterface) Storage(ctx context.Context, name string) (interfaces.StorageInterface, error) {
 	m.ctrl.T.Helper()
@@ -209,6 +254,21 @@ func (m *MockNodeInterface) Storage(ctx context.Context, name string) (interface
 func (mr *MockNodeInterfaceMockRecorder) Storage(ctx, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Storage", reflect.TypeOf((*MockNodeInterface)(nil).Storage), ctx, name)
+}
+
+// StorageDownloadURL mocks base method.
+func (m *MockNodeInterface) StorageDownloadURL(ctx context.Context, options *proxmox.StorageDownloadURLOptions) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StorageDownloadURL", ctx, options)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StorageDownloadURL indicates an expected call of StorageDownloadURL.
+func (mr *MockNodeInterfaceMockRecorder) StorageDownloadURL(ctx, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StorageDownloadURL", reflect.TypeOf((*MockNodeInterface)(nil).StorageDownloadURL), ctx, options)
 }
 
 // Storages mocks base method.
@@ -269,6 +329,21 @@ func (m *MockNodeInterface) VirtualMachines(ctx context.Context) (proxmox.Virtua
 func (mr *MockNodeInterfaceMockRecorder) VirtualMachines(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VirtualMachines", reflect.TypeOf((*MockNodeInterface)(nil).VirtualMachines), ctx)
+}
+
+// VzTmpls mocks base method.
+func (m *MockNodeInterface) VzTmpls(ctx context.Context, storage string) (proxmox.VzTmpls, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VzTmpls", ctx, storage)
+	ret0, _ := ret[0].(proxmox.VzTmpls)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VzTmpls indicates an expected call of VzTmpls.
+func (mr *MockNodeInterfaceMockRecorder) VzTmpls(ctx, storage any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VzTmpls", reflect.TypeOf((*MockNodeInterface)(nil).VzTmpls), ctx, storage)
 }
 
 // Vzdump mocks base method.
@@ -405,6 +480,21 @@ func (mr *MockContainerInterfaceMockRecorder) Details() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Details", reflect.TypeOf((*MockContainerInterface)(nil).Details))
 }
 
+// Interfaces mocks base method.
+func (m *MockContainerInterface) Interfaces(ctx context.Context) (proxmox.ContainerInterfaces, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Interfaces", ctx)
+	ret0, _ := ret[0].(proxmox.ContainerInterfaces)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Interfaces indicates an expected call of Interfaces.
+func (mr *MockContainerInterfaceMockRecorder) Interfaces(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interfaces", reflect.TypeOf((*MockContainerInterface)(nil).Interfaces), ctx)
+}
+
 // Migrate mocks base method.
 func (m *MockContainerInterface) Migrate(ctx context.Context, options *proxmox.ContainerMigrateOptions) (*proxmox.Task, error) {
 	m.ctrl.T.Helper()
@@ -433,6 +523,26 @@ func (m *MockContainerInterface) NewSnapshot(ctx context.Context, name string) (
 func (mr *MockContainerInterfaceMockRecorder) NewSnapshot(ctx, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewSnapshot", reflect.TypeOf((*MockContainerInterface)(nil).NewSnapshot), ctx, name)
+}
+
+// RRDData mocks base method.
+func (m *MockContainerInterface) RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf ...proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, timeframe}
+	for _, a := range cf {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RRDData", varargs...)
+	ret0, _ := ret[0].([]*proxmox.RRDData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RRDData indicates an expected call of RRDData.
+func (mr *MockContainerInterfaceMockRecorder) RRDData(ctx, timeframe any, cf ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, timeframe}, cf...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RRDData", reflect.TypeOf((*MockContainerInterface)(nil).RRDData), varargs...)
 }
 
 // Reboot mocks base method.
@@ -585,6 +695,39 @@ func (mr *MockContainerInterfaceMockRecorder) Suspend(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Suspend", reflect.TypeOf((*MockContainerInterface)(nil).Suspend), ctx)
 }
 
+// TermProxy mocks base method.
+func (m *MockContainerInterface) TermProxy(ctx context.Context) (*proxmox.Term, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TermProxy", ctx)
+	ret0, _ := ret[0].(*proxmox.Term)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TermProxy indicates an expected call of TermProxy.
+func (mr *MockContainerInterfaceMockRecorder) TermProxy(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TermProxy", reflect.TypeOf((*MockContainerInterface)(nil).TermProxy), ctx)
+}
+
+// TermWebSocket mocks base method.
+func (m *MockContainerInterface) TermWebSocket(term *proxmox.Term) (chan []byte, chan []byte, chan error, func() error, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TermWebSocket", term)
+	ret0, _ := ret[0].(chan []byte)
+	ret1, _ := ret[1].(chan []byte)
+	ret2, _ := ret[2].(chan error)
+	ret3, _ := ret[3].(func() error)
+	ret4, _ := ret[4].(error)
+	return ret0, ret1, ret2, ret3, ret4
+}
+
+// TermWebSocket indicates an expected call of TermWebSocket.
+func (mr *MockContainerInterfaceMockRecorder) TermWebSocket(term any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TermWebSocket", reflect.TypeOf((*MockContainerInterface)(nil).TermWebSocket), term)
+}
+
 // MockVirtualMachineInterface is a mock of VirtualMachineInterface interface.
 type MockVirtualMachineInterface struct {
 	ctrl     *gomock.Controller
@@ -622,6 +765,36 @@ func (m *MockVirtualMachineInterface) AddTag(ctx context.Context, value string) 
 func (mr *MockVirtualMachineInterfaceMockRecorder) AddTag(ctx, value any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTag", reflect.TypeOf((*MockVirtualMachineInterface)(nil).AddTag), ctx, value)
+}
+
+// AgentExec mocks base method.
+func (m *MockVirtualMachineInterface) AgentExec(ctx context.Context, command []string, inputData string) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AgentExec", ctx, command, inputData)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AgentExec indicates an expected call of AgentExec.
+func (mr *MockVirtualMachineInterfaceMockRecorder) AgentExec(ctx, command, inputData any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AgentExec", reflect.TypeOf((*MockVirtualMachineInterface)(nil).AgentExec), ctx, command, inputData)
+}
+
+// AgentGetNetworkIFaces mocks base method.
+func (m *MockVirtualMachineInterface) AgentGetNetworkIFaces(ctx context.Context) ([]*proxmox.AgentNetworkIface, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AgentGetNetworkIFaces", ctx)
+	ret0, _ := ret[0].([]*proxmox.AgentNetworkIface)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AgentGetNetworkIFaces indicates an expected call of AgentGetNetworkIFaces.
+func (mr *MockVirtualMachineInterfaceMockRecorder) AgentGetNetworkIFaces(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AgentGetNetworkIFaces", reflect.TypeOf((*MockVirtualMachineInterface)(nil).AgentGetNetworkIFaces), ctx)
 }
 
 // Clone mocks base method.
@@ -764,6 +937,26 @@ func (mr *MockVirtualMachineInterfaceMockRecorder) Pause(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pause", reflect.TypeOf((*MockVirtualMachineInterface)(nil).Pause), ctx)
 }
 
+// RRDData mocks base method.
+func (m *MockVirtualMachineInterface) RRDData(ctx context.Context, timeframe proxmox.Timeframe, cf ...proxmox.ConsolidationFunction) ([]*proxmox.RRDData, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, timeframe}
+	for _, a := range cf {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RRDData", varargs...)
+	ret0, _ := ret[0].([]*proxmox.RRDData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RRDData indicates an expected call of RRDData.
+func (mr *MockVirtualMachineInterfaceMockRecorder) RRDData(ctx, timeframe any, cf ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, timeframe}, cf...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RRDData", reflect.TypeOf((*MockVirtualMachineInterface)(nil).RRDData), varargs...)
+}
+
 // Reboot mocks base method.
 func (m *MockVirtualMachineInterface) Reboot(ctx context.Context) (*proxmox.Task, error) {
 	m.ctrl.T.Helper()
@@ -897,6 +1090,68 @@ func (m *MockVirtualMachineInterface) Stop(ctx context.Context) (*proxmox.Task, 
 func (mr *MockVirtualMachineInterfaceMockRecorder) Stop(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockVirtualMachineInterface)(nil).Stop), ctx)
+}
+
+// TermProxy mocks base method.
+func (m *MockVirtualMachineInterface) TermProxy(ctx context.Context) (*proxmox.Term, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TermProxy", ctx)
+	ret0, _ := ret[0].(*proxmox.Term)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TermProxy indicates an expected call of TermProxy.
+func (mr *MockVirtualMachineInterfaceMockRecorder) TermProxy(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TermProxy", reflect.TypeOf((*MockVirtualMachineInterface)(nil).TermProxy), ctx)
+}
+
+// TermWebSocket mocks base method.
+func (m *MockVirtualMachineInterface) TermWebSocket(term *proxmox.Term) (chan []byte, chan []byte, chan error, func() error, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TermWebSocket", term)
+	ret0, _ := ret[0].(chan []byte)
+	ret1, _ := ret[1].(chan []byte)
+	ret2, _ := ret[2].(chan error)
+	ret3, _ := ret[3].(func() error)
+	ret4, _ := ret[4].(error)
+	return ret0, ret1, ret2, ret3, ret4
+}
+
+// TermWebSocket indicates an expected call of TermWebSocket.
+func (mr *MockVirtualMachineInterfaceMockRecorder) TermWebSocket(term any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TermWebSocket", reflect.TypeOf((*MockVirtualMachineInterface)(nil).TermWebSocket), term)
+}
+
+// WaitForAgent mocks base method.
+func (m *MockVirtualMachineInterface) WaitForAgent(ctx context.Context, seconds int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForAgent", ctx, seconds)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WaitForAgent indicates an expected call of WaitForAgent.
+func (mr *MockVirtualMachineInterfaceMockRecorder) WaitForAgent(ctx, seconds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForAgent", reflect.TypeOf((*MockVirtualMachineInterface)(nil).WaitForAgent), ctx, seconds)
+}
+
+// WaitForAgentExecExit mocks base method.
+func (m *MockVirtualMachineInterface) WaitForAgentExecExit(ctx context.Context, pid, seconds int) (*proxmox.AgentExecStatus, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForAgentExecExit", ctx, pid, seconds)
+	ret0, _ := ret[0].(*proxmox.AgentExecStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForAgentExecExit indicates an expected call of WaitForAgentExecExit.
+func (mr *MockVirtualMachineInterfaceMockRecorder) WaitForAgentExecExit(ctx, pid, seconds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForAgentExecExit", reflect.TypeOf((*MockVirtualMachineInterface)(nil).WaitForAgentExecExit), ctx, pid, seconds)
 }
 
 // MockClusterInterface is a mock of ClusterInterface interface.

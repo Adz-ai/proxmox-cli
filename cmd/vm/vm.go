@@ -32,6 +32,10 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(newConfigCmd())
 	cmd.AddCommand(newResizeCmd())
 	cmd.AddCommand(newTagsCmd())
+	cmd.AddCommand(newExecCmd())
+	cmd.AddCommand(newIPCmd())
+	cmd.AddCommand(newStatsCmd())
+	cmd.AddCommand(newConsoleCmd())
 
 	return cmd
 }

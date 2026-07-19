@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/Adz-ai/proxmox-cli/cmd/auth"
 	"github.com/Adz-ai/proxmox-cli/cmd/backup"
+	"github.com/Adz-ai/proxmox-cli/cmd/images"
 	"github.com/Adz-ai/proxmox-cli/cmd/lxc"
 	"github.com/Adz-ai/proxmox-cli/cmd/nodes"
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
@@ -44,6 +45,8 @@ Get started:
 	cmd.AddCommand(vm.NewCmd())
 	cmd.AddCommand(lxc.NewCmd())
 	cmd.AddCommand(backup.NewCmd())
+	cmd.AddCommand(images.NewTemplateCmd())
+	cmd.AddCommand(images.NewISOCmd())
 
 	return cmd
 }

@@ -4,17 +4,17 @@ A powerful command-line interface for managing Proxmox Virtual Environment (PVE)
 
 ## ✨ Features
 
-- **🔐 Secure Authentication**: Login with username/password, stores session tokens
+- **🔐 Secure Authentication**: Verified TLS by default with private session storage
 - **🖥️ Virtual Machine Management**: Create, delete, list, and describe VMs
-- **📦 LXC Container Support**: Complete container lifecycle management
+- **📦 LXC Container Support**: Create, list, start, stop, and delete containers
 - **🌐 Node Operations**: Monitor and manage cluster nodes
 - **🎯 User-Friendly**: Clear error messages, helpful prompts, and guided setup
 - **⚡ Fast & Efficient**: Direct API communication with Proxmox VE
-- **🧪 Fully Tested**: Comprehensive BDD test suite with mocking
+- **🧪 Automated Testing**: Unit, mocked CLI, and BDD coverage in CI
 
 ## 📋 Requirements
 
-- Go 1.23+ (for building from source)
+- Go 1.26+ (for building from source)
 - Proxmox VE 6.0+ server
 - Network access to Proxmox API (usually port 8006)
 
@@ -29,6 +29,9 @@ cd proxmox-cli
 
 # Build the CLI
 go build -o proxmox-cli main.go
+
+# Or install directly
+go install github.com/Adz-ai/proxmox-cli@latest
 
 # Optional: Move to PATH
 sudo mv proxmox-cli /usr/local/bin/
@@ -65,6 +68,7 @@ proxmox-cli auth login -u <user>    # Authenticate with Proxmox
 proxmox-cli auth logout             # Clear authentication tokens
 proxmox-cli status                  # Check configuration and connection
 proxmox-cli status --verbose        # Detailed status with server info
+proxmox-cli --version               # Show build version
 ```
 
 ### Virtual Machine Management
@@ -80,15 +84,15 @@ proxmox-cli vm delete -n <node> -i <vmid>    # Delete a VM
 
 ### LXC Container Management
 ```bash
-# List and inspect containers
+# List containers
 proxmox-cli lxc get                 # List all containers across all nodes
-proxmox-cli lxc describe -n <node> -i <ctid>  # Show container details
 
 # Container lifecycle
 proxmox-cli lxc create -n <node> -i <ctid> -s <spec.yaml>  # Create from YAML
 proxmox-cli lxc start -n <node> -i <ctid>     # Start a container
 proxmox-cli lxc stop -n <node> -i <ctid>      # Stop a container
 proxmox-cli lxc delete -n <node> -i <ctid>    # Delete a container
+proxmox-cli lxc delete -n <node> -i <ctid> --force # Force deletion
 
 # Advanced operations (coming soon)
 proxmox-cli lxc clone -n <node> -s <source> -t <target> --name <name>
@@ -111,10 +115,14 @@ proxmox-cli nodes describe -n <node>  # Show detailed node information
 
 Configuration is stored in `~/.proxmox-cli/config.json`
 
+TLS certificates are verified by default. For a private CA, configure its PEM file with `proxmox-cli init --force --ca-cert /path/to/ca.pem`. For isolated lab environments only, `--insecure` disables certificate verification.
+
 ### Sample Configuration
 ```json
 {
   "server_url": "https://your-proxmox:8006",
+  "insecure": false,
+  "ca_cert": "",
   "auth_ticket": {
     "ticket": "PVE:user@realm:...",
     "CSRFPreventionToken": "..."
@@ -185,12 +193,7 @@ go test -cover ./...
 ```
 
 ### BDD Test Features
-The project includes comprehensive BDD tests covering:
-- ✅ Authentication workflows
-- ✅ Node management operations  
-- ✅ LXC container lifecycle
-- ✅ VM management operations
-- ✅ Error handling scenarios
+The active BDD suite covers configuration, authentication state, node inspection, and the implemented LXC lifecycle. Planned commands are tagged `@skip` until implemented.
 
 Test features are located in `test/bdd/features/` and can be run directly from IDEs that support Cucumber/Gherkin.
 
@@ -234,8 +237,8 @@ proxmox-cli/
 - Node listing and detailed information
 - VM operations (list, describe, create, delete)
 - LXC operations (list, create, start, stop, delete)
-- Comprehensive error handling
-- Full BDD test coverage
+- Nonzero exit statuses for operational failures
+- TLS verification, custom CA support, and private config files
 
 ### 🔄 In Development
 - LXC advanced operations (clone, snapshots)
@@ -270,14 +273,14 @@ Contributions are welcome! Please:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
 
 ## 🙏 Acknowledgments
 
 - Built with [Cobra](https://github.com/spf13/cobra) for CLI framework
 - Uses [go-proxmox](https://github.com/luthermonson/go-proxmox) for Proxmox API
 - Testing with [Godog](https://github.com/cucumber/godog) for BDD
-- Mocking with [GoMock](https://github.com/golang/mock) for reliable tests
+- Mocking with [GoMock](https://github.com/uber-go/mock) for reliable tests
 - Inspired by the need for better Proxmox CLI tools
 
 ## 📞 Support

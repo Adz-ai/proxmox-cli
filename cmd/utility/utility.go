@@ -3,11 +3,21 @@ package utility
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
+	"math"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
 
-	"proxmox-cli/internal/interfaces"
+	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
+
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/viper"
 )
@@ -81,7 +91,6 @@ func (r *RealNode) NewContainer(ctx context.Context, vmid int, options ...proxmo
 	return r.node.NewContainer(ctx, vmid, options...)
 }
 
-
 func (r *RealContainer) Start(ctx context.Context) (*proxmox.Task, error) {
 	return r.container.Start(ctx)
 }
@@ -98,8 +107,8 @@ func (r *RealContainer) Reboot(ctx context.Context) (*proxmox.Task, error) {
 	return r.container.Reboot(ctx)
 }
 
-func (r *RealContainer) Delete(ctx context.Context) (*proxmox.Task, error) {
-	return r.container.Delete(ctx)
+func (r *RealContainer) Delete(ctx context.Context, options *proxmox.ContainerDeleteOptions) (*proxmox.Task, error) {
+	return r.container.Delete(ctx, options)
 }
 
 func (r *RealContainer) Clone(ctx context.Context, options *proxmox.ContainerCloneOptions) (int, *proxmox.Task, error) {
@@ -126,8 +135,24 @@ func (r *RealVirtualMachine) Reboot(ctx context.Context) (*proxmox.Task, error) 
 	return r.vm.Reboot(ctx)
 }
 
-func (r *RealVirtualMachine) Delete(ctx context.Context) (*proxmox.Task, error) {
-	return r.vm.Delete(ctx)
+func (r *RealVirtualMachine) Details() interfaces.VirtualMachineDetails {
+	return interfaces.VirtualMachineDetails{
+		Name:      r.vm.Name,
+		Node:      r.vm.Node,
+		Status:    r.vm.Status,
+		Tags:      r.vm.Tags,
+		CPUs:      r.vm.CPUs,
+		CPU:       r.vm.CPU,
+		Memory:    r.vm.Mem,
+		MaxMemory: r.vm.MaxMem,
+		Disk:      r.vm.Disk,
+		MaxDisk:   r.vm.MaxDisk,
+		Uptime:    r.vm.Uptime,
+	}
+}
+
+func (r *RealVirtualMachine) Delete(ctx context.Context, options *proxmox.VirtualMachineDeleteOptions) (*proxmox.Task, error) {
+	return r.vm.Delete(ctx, options)
 }
 
 func (r *RealVirtualMachine) Clone(ctx context.Context, options *proxmox.VirtualMachineCloneOptions) (int, *proxmox.Task, error) {
@@ -135,73 +160,231 @@ func (r *RealVirtualMachine) Clone(ctx context.Context, options *proxmox.Virtual
 }
 
 // Global variable for dependency injection (for testing)
-var clientFactory func() interfaces.ProxmoxClientInterface
+var (
+	clientFactory   func() interfaces.ProxmoxClientInterface
+	clientFactoryMu sync.RWMutex
+)
 
 func CheckIfAuthPresent() error {
 	// First check if the server URL is configured
 	serverURL := viper.GetString("server_url")
 	if serverURL == "" {
-		return errors.New("❌ Not configured. Please run 'proxmox-cli auth login -u <username>' to set up")
+		return errors.New("not configured; run 'proxmox-cli init'")
 	}
 
 	// Check if the client is authenticated
 	authTicket := viper.Sub("auth_ticket")
 	if authTicket == nil || authTicket.GetString("ticket") == "" || authTicket.GetString("CSRFPreventionToken") == "" {
-		return errors.New("❌ Not authenticated. Please run 'proxmox-cli auth login -u <username>' to log in")
+		return errors.New("not authenticated; run 'proxmox-cli auth login -u <username>'")
 	}
 	return nil
 }
 
 // GetClient returns a Proxmox client (real or mock depending on test context)
-func GetClient() interfaces.ProxmoxClientInterface {
-	// If we have a mock factory (from tests), use it
-	if clientFactory != nil {
-		return clientFactory()
+func GetClient() (interfaces.ProxmoxClientInterface, error) {
+	clientFactoryMu.RLock()
+	factory := clientFactory
+	clientFactoryMu.RUnlock()
+	if factory != nil {
+		return factory(), nil
 	}
 
-	// Otherwise, create real client
 	endpoint := viper.GetString("server_url")
 	if endpoint == "" {
-		log.Fatal("❌ Proxmox server URL not configured. Please run 'proxmox-cli auth login -u <username>'")
+		return nil, errors.New("Proxmox server URL is not configured")
 	}
 
-	// Create HTTP client with TLS config
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
+	normalizedEndpoint, err := NormalizeServerURL(endpoint)
+	if err != nil {
+		return nil, err
 	}
+	httpClient, err := NewHTTPClient(viper.GetBool("insecure"), viper.GetString("ca_cert"))
+	if err != nil {
+		return nil, err
+	}
+	apiEndpoint := normalizedEndpoint + "/api2/json"
 
-	// Create Proxmox client with session
 	authTicket := viper.Sub("auth_ticket")
 	var realClient *proxmox.Client
 	if authTicket != nil {
 		ticket := authTicket.GetString("ticket")
 		csrfToken := authTicket.GetString("CSRFPreventionToken")
 		if ticket != "" && csrfToken != "" {
-			// Use WithSession option to set auth
-			realClient = proxmox.NewClient(endpoint+"/api2/json",
+			realClient = proxmox.NewClient(apiEndpoint,
 				proxmox.WithHTTPClient(httpClient),
 				proxmox.WithSession(ticket, csrfToken))
 		}
 	}
 
 	if realClient == nil {
-		// Return the client without auth if no session found
-		realClient = proxmox.NewClient(endpoint+"/api2/json", proxmox.WithHTTPClient(httpClient))
+		realClient = proxmox.NewClient(apiEndpoint, proxmox.WithHTTPClient(httpClient))
 	}
 
-	return &RealProxmoxClient{client: realClient}
+	return &RealProxmoxClient{client: realClient}, nil
+}
+
+func AuthenticatedClient() (interfaces.ProxmoxClientInterface, error) {
+	if err := CheckIfAuthPresent(); err != nil {
+		return nil, err
+	}
+	return GetClient()
 }
 
 // SetClientFactory sets a factory function for creating clients (used by tests)
 func SetClientFactory(factory func() interfaces.ProxmoxClientInterface) {
+	clientFactoryMu.Lock()
+	defer clientFactoryMu.Unlock()
 	clientFactory = factory
 }
 
 // ResetClientFactory resets the client factory to use real clients
 func ResetClientFactory() {
+	clientFactoryMu.Lock()
+	defer clientFactoryMu.Unlock()
 	clientFactory = nil
+}
+
+func NormalizeServerURL(rawURL string) (string, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return "", errors.New("server URL cannot be empty")
+	}
+	if !strings.Contains(rawURL, "://") {
+		rawURL = "https://" + rawURL
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid server URL: %w", err)
+	}
+	if parsed.Scheme != "https" {
+		return "", fmt.Errorf("unsupported server URL scheme %q; HTTPS is required", parsed.Scheme)
+	}
+	if parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("server URL must contain only a scheme, host, port, and optional path")
+	}
+	parsed.Path = strings.TrimSuffix(strings.TrimSuffix(parsed.Path, "/"), "/api2/json")
+	parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+	return parsed.String(), nil
+}
+
+func NewHTTPClient(insecure bool, caCertPath string) (*http.Client, error) {
+	if insecure && caCertPath != "" {
+		return nil, errors.New("insecure TLS and a custom CA certificate are mutually exclusive")
+	}
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("default HTTP transport has an unexpected type")
+	}
+	transport = transport.Clone()
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: insecure}
+	if caCertPath != "" {
+		pem, err := os.ReadFile(caCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("read CA certificate: %w", err)
+		}
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, errors.New("CA certificate file contains no valid PEM certificates")
+		}
+		tlsConfig.RootCAs = pool
+	}
+	transport.TLSClientConfig = tlsConfig
+	return &http.Client{Transport: transport, Timeout: 30 * time.Second}, nil
+}
+
+func ConfigFile() (string, error) {
+	if configured := os.Getenv("PROXMOX_CLI_CONFIG"); configured != "" {
+		return configured, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, ".proxmox-cli", "config.json"), nil
+}
+
+func LoadConfig() error {
+	path, err := ConfigFile()
+	if err != nil {
+		return err
+	}
+	viper.SetConfigFile(path)
+	viper.SetConfigType("json")
+	if err := viper.ReadInConfig(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		var notFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &notFound) {
+			return fmt.Errorf("read configuration: %w", err)
+		}
+	} else if err == nil {
+		if err := os.Chmod(path, 0o600); err != nil {
+			return fmt.Errorf("secure configuration: %w", err)
+		}
+	}
+	return nil
+}
+
+func WriteConfig() error {
+	path, err := ConfigFile()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create configuration directory: %w", err)
+	}
+	data, err := json.MarshalIndent(viper.AllSettings(), "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode configuration: %w", err)
+	}
+	data = append(data, '\n')
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary configuration: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return fmt.Errorf("secure temporary configuration: %w", err)
+	}
+	if _, err := temporary.Write(data); err != nil {
+		temporary.Close()
+		return fmt.Errorf("write configuration: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return fmt.Errorf("sync configuration: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close configuration: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace configuration: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("secure configuration: %w", err)
+	}
+	viper.SetConfigFile(path)
+	return nil
+}
+
+func WaitForTask(ctx context.Context, task *proxmox.Task, timeout time.Duration) error {
+	if task == nil {
+		return errors.New("Proxmox returned no task")
+	}
+	if !task.IsSuccessful && !task.IsFailed {
+		seconds := int(math.Ceil(timeout.Seconds()))
+		if seconds < 1 {
+			seconds = 1
+		}
+		if err := task.WaitFor(ctx, seconds); err != nil {
+			return fmt.Errorf("wait for task %s: %w", task.UPID, err)
+		}
+	}
+	if !task.IsSuccessful {
+		return fmt.Errorf("task %s failed: %s", task.UPID, task.ExitStatus)
+	}
+	return nil
 }

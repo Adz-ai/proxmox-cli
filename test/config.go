@@ -4,10 +4,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/golang/mock/gomock"
-	"proxmox-cli/cmd/utility"
-	"proxmox-cli/internal/interfaces"
-	"proxmox-cli/test/mocks"
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
+	"github.com/Adz-ai/proxmox-cli/test/mocks"
+	"go.uber.org/mock/gomock"
 )
 
 // TestConfig holds test configuration
@@ -63,12 +63,12 @@ func ShouldSkipTest(tags string) bool {
 // SetupMockClient configures the mock client for testing
 func SetupMockClient(ctrl *gomock.Controller) *mocks.MockProxmoxClientInterface {
 	mockClient := mocks.NewMockProxmoxClientInterface(ctrl)
-	
+
 	// Set up the dependency injection
 	utility.SetClientFactory(func() interfaces.ProxmoxClientInterface {
 		return mockClient
 	})
-	
+
 	return mockClient
 }
 

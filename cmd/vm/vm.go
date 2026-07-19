@@ -4,15 +4,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Cmd = &cobra.Command{
-	Use:   "vm",
-	Short: "Commands related with Virtual Machines",
-	Long:  "Manage virtual machines in the Proxmox cluster",
-}
+func NewCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "vm",
+		Short: "Commands related with Virtual Machines",
+		Long:  "Manage virtual machines in the Proxmox cluster",
+		Args:  cobra.NoArgs,
+	}
 
-func init() {
-	Cmd.AddCommand(getCmd)
-	Cmd.AddCommand(createVMCmd)
-	Cmd.AddCommand(deleteCmd)
-	Cmd.AddCommand(describeCmd)
+	cmd.AddCommand(newGetCmd())
+	cmd.AddCommand(newCreateVMCmd())
+	cmd.AddCommand(newDeleteCmd())
+	cmd.AddCommand(newDescribeCmd())
+
+	return cmd
 }

@@ -3,73 +3,79 @@ package vm
 import (
 	"context"
 	"fmt"
-	"log"
-	"proxmox-cli/cmd/utility"
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
-var deleteCmd = &cobra.Command{
-	Use:   "delete",
-	Short: "delete virtual machine",
-	Run: func(cmd *cobra.Command, args []string) {
-		out := cmd.OutOrStdout()
-		node, _ := cmd.Flags().GetString("node")
-		id, _ := cmd.Flags().GetInt("id")
-		
-		err := deleteVm(node, id)
-		if err != nil {
-			fmt.Fprintf(out, "Error deleting VM: %v\n", err)
-			return
-		}
-		
-		fmt.Fprintf(out, "VM %d deleted successfully\n", id)
-	},
+func newDeleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "delete virtual machine",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			node, err := cmd.Flags().GetString("node")
+			if err != nil {
+				return fmt.Errorf("get node flag: %w", err)
+			}
+			id, err := cmd.Flags().GetInt("id")
+			if err != nil {
+				return fmt.Errorf("get id flag: %w", err)
+			}
+			node = strings.TrimSpace(node)
+			if node == "" {
+				return fmt.Errorf("validate node: node cannot be empty")
+			}
+			if id <= 0 {
+				return fmt.Errorf("validate id: id must be positive")
+			}
+
+			if err := deleteVM(cmd.Context(), node, id); err != nil {
+				return fmt.Errorf("delete VM %d from node %q: %w", id, node, err)
+			}
+
+			fmt.Fprintf(out, "VM %d deleted successfully\n", id)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringP("node", "n", "", "node to delete VM from (required)")
+	cmd.Flags().IntP("id", "i", 0, "id for VM to delete (required)")
+	if err := cmd.MarkFlagRequired("node"); err != nil {
+		panic(err)
+	}
+	if err := cmd.MarkFlagRequired("id"); err != nil {
+		panic(err)
+	}
+
+	return cmd
 }
 
-func init() {
-	deleteCmd.Flags().StringP("node", "n", "", "node to delete VM from (required)")
-	deleteCmd.Flags().IntP("id", "i", 0, "id for VM to delete (required)")
-	err := deleteCmd.MarkFlagRequired("node")
+func deleteVM(ctx context.Context, node string, id int) error {
+	client, err := utility.AuthenticatedClient()
 	if err != nil {
-		log.Fatal(err)
-	}
-	err = deleteCmd.MarkFlagRequired("id")
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func deleteVm(node string, id int) error {
-	err := utility.CheckIfAuthPresent()
-	if err != nil {
-		return err
+		return fmt.Errorf("authenticate Proxmox client: %w", err)
 	}
 
-	client := utility.GetClient()
-
-	retrievedNode, err := client.Node(context.Background(), node)
+	retrievedNode, err := client.Node(ctx, node)
 	if err != nil {
-		return err
+		return fmt.Errorf("get node %q: %w", node, err)
 	}
 
-	vmToDelete, err := retrievedNode.VirtualMachine(context.Background(), id)
+	vmToDelete, err := retrievedNode.VirtualMachine(ctx, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("get VM %d: %w", id, err)
 	}
 
-	task, err := vmToDelete.Delete(context.Background())
+	task, err := vmToDelete.Delete(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("start delete task: %w", err)
 	}
-
-	err = task.WaitFor(context.Background(), 5)
-	if err != nil {
-		return err
-	}
-
-	if !task.IsSuccessful {
-		return fmt.Errorf("VM delete failed")
+	if err := utility.WaitForTask(ctx, task, 10*time.Minute); err != nil {
+		return fmt.Errorf("wait for delete task: %w", err)
 	}
 
 	return nil

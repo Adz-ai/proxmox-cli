@@ -83,11 +83,11 @@ Feature: Authentication and Setup
   Scenario: Access protected command without auth
     Given the CLI is configured but not authenticated
     When I run the command "./proxmox-cli nodes get"
-    Then I should see "❌ Not authenticated"
-    And I should see "Please run 'proxmox-cli auth login -u <username>' to log in"
+    Then I should see "not authenticated"
+    And I should see "run 'proxmox-cli auth login -u <username>'"
 
   Scenario: Access protected command without config
     Given the CLI is not configured
     When I run the command "./proxmox-cli vm get"
-    Then I should see "❌ Not configured"
-    And I should see "Please run 'proxmox-cli auth login -u <username>' to set up"
+    Then I should see "not configured"
+    And I should see "run 'proxmox-cli init'"

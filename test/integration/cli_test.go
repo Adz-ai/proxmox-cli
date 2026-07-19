@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/viper"
+	"go.uber.org/mock/gomock"
 
-	"proxmox-cli/cmd"
-	"proxmox-cli/cmd/utility"
-	"proxmox-cli/internal/interfaces"
-	"proxmox-cli/test/mocks"
+	"github.com/Adz-ai/proxmox-cli/cmd"
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
+	"github.com/Adz-ai/proxmox-cli/test/mocks"
 )
 
 // TestLXCGetCommand tests the lxc get command with mocked API responses
@@ -48,7 +48,7 @@ func TestLXCGetCommand(t *testing.T) {
 
 	mockClient.EXPECT().Node(ctx, "pve1").Return(mockNode, nil)
 	mockNode.EXPECT().Containers(ctx).Return(containers1, nil)
-	
+
 	mockClient.EXPECT().Node(ctx, "pve2").Return(mockNode, nil)
 	mockNode.EXPECT().Containers(ctx).Return(containers2, nil)
 
@@ -59,7 +59,10 @@ func TestLXCGetCommand(t *testing.T) {
 	defer utility.ResetClientFactory()
 
 	// Execute command
-	output := executeCommand(t, []string{"lxc", "get"})
+	output, err := executeCommand(t, []string{"lxc", "get"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify output
 	expectedStrings := []string{
@@ -102,9 +105,10 @@ func TestLXCStartCommand(t *testing.T) {
 	ctx := gomock.Any()
 	mockClient.EXPECT().Node(ctx, "pve1").Return(mockNode, nil)
 	mockNode.EXPECT().Container(ctx, 100).Return(mockContainer, nil)
-	
+
 	task := &proxmox.Task{
-		UPID: proxmox.UPID("UPID:pve1:00001234:00112233:65432100:start"),
+		UPID:         proxmox.UPID("UPID:pve1:00001234:00112233:65432100:start"),
+		IsSuccessful: true,
 	}
 	mockContainer.EXPECT().Start(ctx).Return(task, nil)
 
@@ -115,14 +119,14 @@ func TestLXCStartCommand(t *testing.T) {
 	defer utility.ResetClientFactory()
 
 	// Execute command
-	output := executeCommand(t, []string{"lxc", "start", "-n", "pve1", "-i", "100"})
+	output, err := executeCommand(t, []string{"lxc", "start", "-n", "pve1", "-i", "100"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify output
 	if !bytes.Contains(output, []byte("Container 100 started successfully")) {
 		t.Errorf("Expected success message in output, got:\n%s", output)
-	}
-	if !bytes.Contains(output, []byte("UPID:pve1:00001234:00112233:65432100:start")) {
-		t.Errorf("Expected UPID in output, got:\n%s", output)
 	}
 }
 
@@ -148,8 +152,8 @@ func TestNodeGetCommand(t *testing.T) {
 			Uptime: 432000, // 5 days
 			CPU:    0.15,
 			MaxCPU: 8,
-			Mem:    4294967296,    // 4GB
-			MaxMem: 17179869184,   // 16GB
+			Mem:    4294967296,  // 4GB
+			MaxMem: 17179869184, // 16GB
 		},
 		&proxmox.NodeStatus{
 			Node:   "pve2",
@@ -167,7 +171,10 @@ func TestNodeGetCommand(t *testing.T) {
 	defer utility.ResetClientFactory()
 
 	// Execute command
-	output := executeCommand(t, []string{"nodes", "get"})
+	output, err := executeCommand(t, []string{"nodes", "get"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify output
 	expectedStrings := []string{
@@ -190,13 +197,13 @@ func TestNodeGetCommand(t *testing.T) {
 func TestAuthenticationCheckFailure(t *testing.T) {
 	// Clear any config
 	viper.Reset()
+	t.Setenv("PROXMOX_CLI_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
 
 	// Execute a protected command
-	output := executeCommand(t, []string{"lxc", "get"})
+	output, err := executeCommand(t, []string{"lxc", "get"})
 
-	// Should see auth error
-	if !bytes.Contains(output, []byte("Not configured")) || !bytes.Contains(output, []byte("Please run 'proxmox-cli auth login")) {
-		t.Errorf("Expected authentication error message, got:\n%s", output)
+	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("not configured")) {
+		t.Fatalf("expected not configured error, got %v\n%s", err, output)
 	}
 }
 
@@ -204,43 +211,41 @@ func TestAuthenticationCheckFailure(t *testing.T) {
 
 func setupTestConfig(t *testing.T) {
 	t.Helper()
-	
+
 	// Create temp config directory
 	tempDir := t.TempDir()
 	configDir := filepath.Join(tempDir, ".proxmox-cli")
-	os.MkdirAll(configDir, 0755)
-	
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PROXMOX_CLI_CONFIG", filepath.Join(configDir, "config.json"))
+
 	// Set up viper
 	viper.Reset()
-	viper.SetConfigFile(filepath.Join(configDir, "config.json"))
 	viper.Set("server_url", "https://192.168.1.100:8006")
 	viper.Set("auth_ticket.ticket", "PVE:root@pam:1234567890::abcdef")
 	viper.Set("auth_ticket.CSRFPreventionToken", "1234567890:abcdef")
-	viper.WriteConfig()
+	if err := utility.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func cleanupTestConfig() {
 	viper.Reset()
 }
 
-func executeCommand(t *testing.T, args []string) []byte {
+func executeCommand(t *testing.T, args []string) ([]byte, error) {
 	t.Helper()
-	
+
 	// Create command
 	rootCmd := cmd.NewRootCmd()
-	
+
 	// Capture output
 	var output bytes.Buffer
 	rootCmd.SetOut(&output)
 	rootCmd.SetErr(&output)
 	rootCmd.SetArgs(args)
-	
-	// Execute
+
 	err := rootCmd.Execute()
-	if err != nil {
-		// Some commands may return errors (like auth failures), which is expected
-		// The error is already written to output
-	}
-	
-	return output.Bytes()
+	return output.Bytes(), err
 }

@@ -3,119 +3,94 @@ package vm
 import (
 	"context"
 	"fmt"
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 	"io"
-	"log"
-	"proxmox-cli/cmd/utility"
-	"reflect"
+	"strings"
 	"time"
 
-	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/cobra"
 )
 
-var describeCmd = &cobra.Command{
-	Use:   "describe",
-	Short: "Describe a virtual machine",
-	Run: func(cmd *cobra.Command, args []string) {
-		out := cmd.OutOrStdout()
-		node, _ := cmd.Flags().GetString("node")
-		vmID, _ := cmd.Flags().GetInt("id")
-		if node == "" || vmID == 0 {
-			fmt.Fprintln(out, "Node name and VM ID must be provided. Use --node and --id flags.")
-			return
-		}
+func newDescribeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "describe",
+		Short: "Describe a virtual machine",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			node, err := cmd.Flags().GetString("node")
+			if err != nil {
+				return fmt.Errorf("get node flag: %w", err)
+			}
+			vmID, err := cmd.Flags().GetInt("id")
+			if err != nil {
+				return fmt.Errorf("get id flag: %w", err)
+			}
+			node = strings.TrimSpace(node)
+			if node == "" {
+				return fmt.Errorf("validate node: node cannot be empty")
+			}
+			if vmID <= 0 {
+				return fmt.Errorf("validate id: id must be positive")
+			}
 
-		// Fetch and display the VM details
-		err := describeVirtualMachine(out, node, vmID)
-		if err != nil {
-			fmt.Fprintf(out, "Error describing virtual machine: %v\n", err)
-			return
-		}
-	},
+			if err := describeVirtualMachine(cmd.Context(), out, node, vmID); err != nil {
+				return fmt.Errorf("describe virtual machine %d on node %q: %w", vmID, node, err)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringP("node", "n", "", "Node name")
+	cmd.Flags().IntP("id", "i", 0, "VM ID")
+	if err := cmd.MarkFlagRequired("node"); err != nil {
+		panic(err)
+	}
+	if err := cmd.MarkFlagRequired("id"); err != nil {
+		panic(err)
+	}
+
+	return cmd
 }
 
-func init() {
-	describeCmd.Flags().StringP("node", "n", "", "Node name")
-	describeCmd.Flags().IntP("id", "i", 0, "VM ID")
-	err := describeCmd.MarkFlagRequired("node")
+func describeVirtualMachine(ctx context.Context, out io.Writer, node string, vmID int) error {
+	client, err := utility.AuthenticatedClient()
 	if err != nil {
-		log.Fatal(err)
-	}
-	err = describeCmd.MarkFlagRequired("id")
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func describeVirtualMachine(out io.Writer, node string, vmID int) error {
-	err := utility.CheckIfAuthPresent()
-	if err != nil {
-		return err
+		return fmt.Errorf("authenticate Proxmox client: %w", err)
 	}
 
-	client := utility.GetClient()
-
-	retrievedNode, err := client.Node(context.Background(), node)
+	retrievedNode, err := client.Node(ctx, node)
 	if err != nil {
-		return err
+		return fmt.Errorf("get node %q: %w", node, err)
 	}
 
-	_, err = retrievedNode.VirtualMachine(context.Background(), vmID)
+	vm, err := retrievedNode.VirtualMachine(ctx, vmID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get VM %d: %w", vmID, err)
 	}
+	details := vm.Details()
 
-	// TODO: Need to refactor this to work with VirtualMachineInterface
-	// For now, just print a simple message
-	fmt.Fprintf(out, "VM %d details would be shown here\n", vmID)
+	fmt.Fprintln(out, "VM Details")
+	fmt.Fprintln(out, "==========")
+	fmt.Fprintf(out, "ID: %d\n", vmID)
+	fmt.Fprintf(out, "Name: %s\n", details.Name)
+	fmt.Fprintf(out, "Node: %s\n", details.Node)
+	fmt.Fprintf(out, "Status: %s\n", details.Status)
+	if details.Tags != "" {
+		fmt.Fprintf(out, "Tags: %s\n", details.Tags)
+	}
+	fmt.Fprintf(out, "Uptime: %s\n", formatUptime(details.Uptime))
+	fmt.Fprintf(out, "CPUs: %d\n", details.CPUs)
+	fmt.Fprintf(out, "CPU Usage: %.2f%%\n", details.CPU*100)
+	fmt.Fprintf(out, "Memory: %s / %s\n", formatBytes(details.Memory), formatBytes(details.MaxMemory))
+	fmt.Fprintf(out, "Disk: %s / %s\n", formatBytes(details.Disk), formatBytes(details.MaxDisk))
 
 	return nil
 }
 
-func printVMAttributes(out io.Writer, vm *proxmox.VirtualMachine) {
-	var vmConfigField reflect.StructField
-	var vmConfigValue reflect.Value
-	v := reflect.ValueOf(vm).Elem()
-	t := v.Type()
-	fmt.Fprintln(out, "VM Details:")
-	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
-		value := v.Field(i)
-
-		if field.Name == "client" {
-			continue
-		}
-
-		if field.Name == "VirtualMachineConfig" {
-			vmConfigField = field
-			vmConfigValue = value
-			continue
-		}
-
-		if field.Name == "Uptime" {
-			fmt.Fprintf(out, "%s: %s\n", field.Name, formatUptime(value.Uint()))
-		} else {
-			fmt.Fprintf(out, "%s: %v\n", field.Name, value.Interface())
-		}
-	}
-	// Print VirtualMachineConfig at the end
-	if !vmConfigValue.IsNil() {
-		fmt.Fprintf(out, "%s:\n", vmConfigField.Name)
-
-		for i := 0; i < vmConfigValue.Elem().NumField(); i++ {
-			field := vmConfigValue.Elem().Type().Field(i)
-			fieldValue := vmConfigValue.Elem().Field(i)
-
-			// Skip empty strings, maps, and slices
-			if (field.Type.Kind() == reflect.String && fieldValue.String() == "") ||
-				(field.Type.Kind() == reflect.Map && fieldValue.Len() == 0) ||
-				(field.Type.Kind() == reflect.Slice && fieldValue.Len() == 0) {
-				continue
-			}
-
-			fmt.Fprintf(out, "    %s: %+v\n", field.Name, fieldValue.Interface())
-		}
-	}
+func formatBytes(bytes uint64) string {
+	const gibibyte = 1024 * 1024 * 1024
+	return fmt.Sprintf("%.2f GiB", float64(bytes)/gibibyte)
 }
 
 func formatUptime(uptime uint64) string {

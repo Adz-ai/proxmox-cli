@@ -5,35 +5,35 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 )
 
-var logoutCmd = &cobra.Command{
-	Use:   "logout",
-	Short: "Log out from Proxmox and clear authentication",
-	Long:  `Clear the stored authentication ticket and CSRF token.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		out := cmd.OutOrStdout()
-		
-		// Check if authenticated
-		authTicket := viper.Sub("auth_ticket")
-		if authTicket == nil || authTicket.GetString("ticket") == "" {
-			fmt.Fprintln(out, "ℹ️  Not currently logged in")
-			return
-		}
+func newLogoutCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logout",
+		Short: "Log out from Proxmox and clear authentication",
+		Long:  `Clear the stored authentication ticket and CSRF token.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
 
-		// Clear auth ticket
-		viper.Set("auth_ticket", nil)
-		err := viper.WriteConfig()
-		if err != nil {
-			fmt.Fprintf(out, "❌ Failed to clear authentication: %s\n", err)
-			return
-		}
+			authTicket := viper.Sub("auth_ticket")
+			wasAuthenticated := authTicket != nil && authTicket.GetString("ticket") != ""
 
-		fmt.Fprintln(out, "✅ Logged out successfully")
-		fmt.Fprintln(out, "👋 Your authentication has been cleared")
-	},
-}
+			viper.Set("auth_ticket", map[string]any{})
+			if err := utility.WriteConfig(); err != nil {
+				return fmt.Errorf("clear authentication: %w", err)
+			}
 
-func init() {
-	Cmd.AddCommand(logoutCmd)
+			if !wasAuthenticated {
+				fmt.Fprintln(out, "ℹ️  Not currently logged in")
+				return nil
+			}
+
+			fmt.Fprintln(out, "✅ Logged out successfully")
+			fmt.Fprintln(out, "👋 Your authentication has been cleared")
+			return nil
+		},
+	}
 }

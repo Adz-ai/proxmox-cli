@@ -2,17 +2,23 @@ package utility
 
 import (
 	"context"
+	"crypto/tls"
+	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/viper"
-	
-	"proxmox-cli/internal/interfaces"
-	"proxmox-cli/test/mocks"
+	"go.uber.org/mock/gomock"
+
+	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
+	"github.com/Adz-ai/proxmox-cli/test/mocks"
 )
 
 func TestCheckIfAuthPresent(t *testing.T) {
+	t.Cleanup(viper.Reset)
 	tests := []struct {
 		name          string
 		setupConfig   func()
@@ -26,7 +32,7 @@ func TestCheckIfAuthPresent(t *testing.T) {
 				viper.Set("server_url", "")
 			},
 			expectedError: true,
-			errorContains: "Not configured",
+			errorContains: "not configured",
 		},
 		{
 			name: "only server configured",
@@ -35,7 +41,7 @@ func TestCheckIfAuthPresent(t *testing.T) {
 				viper.Set("server_url", "https://192.168.1.100:8006")
 			},
 			expectedError: true,
-			errorContains: "Not authenticated",
+			errorContains: "not authenticated",
 		},
 		{
 			name: "server configured with empty auth ticket",
@@ -46,7 +52,7 @@ func TestCheckIfAuthPresent(t *testing.T) {
 				viper.Set("auth_ticket.CSRFPreventionToken", "")
 			},
 			expectedError: true,
-			errorContains: "Not authenticated",
+			errorContains: "not authenticated",
 		},
 		{
 			name: "fully configured",
@@ -82,7 +88,7 @@ func TestCheckIfAuthPresent(t *testing.T) {
 }
 
 func TestGetClient(t *testing.T) {
-	// Only test cases that don't call log.Fatal to avoid process exit
+	t.Cleanup(viper.Reset)
 	tests := []struct {
 		name        string
 		setupConfig func()
@@ -109,7 +115,10 @@ func TestGetClient(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setupConfig()
 
-			client := GetClient()
+			client, err := GetClient()
+			if err != nil {
+				t.Fatalf("GetClient() error = %v", err)
+			}
 			if client == nil {
 				t.Errorf("Expected client but got nil")
 			}
@@ -140,7 +149,7 @@ func TestGetClient_WithMockFactory(t *testing.T) {
 
 	// Create mock client
 	mockClient := mocks.NewMockProxmoxClientInterface(ctrl)
-	
+
 	// Set up factory to return our mock
 	SetClientFactory(func() interfaces.ProxmoxClientInterface {
 		return mockClient
@@ -148,7 +157,10 @@ func TestGetClient_WithMockFactory(t *testing.T) {
 	defer ResetClientFactory()
 
 	// Get client should return our mock
-	client := GetClient()
+	client, err := GetClient()
+	if err != nil {
+		t.Fatalf("GetClient() error = %v", err)
+	}
 	if client != mockClient {
 		t.Error("GetClient should return the mock client")
 	}
@@ -160,7 +172,7 @@ func TestNodesCommand_WithMocks(t *testing.T) {
 
 	// Create mock client
 	mockClient := mocks.NewMockProxmoxClientInterface(ctrl)
-	
+
 	// Set up expectations
 	expectedNodes := proxmox.NodeStatuses{
 		&proxmox.NodeStatus{
@@ -170,13 +182,13 @@ func TestNodesCommand_WithMocks(t *testing.T) {
 			Uptime: 86400,
 		},
 		&proxmox.NodeStatus{
-			Node:   "pve2", 
+			Node:   "pve2",
 			Status: "online",
 			Type:   "node",
 			Uptime: 172800,
 		},
 	}
-	
+
 	ctx := context.Background()
 	mockClient.EXPECT().Nodes(ctx).Return(expectedNodes, nil)
 
@@ -187,17 +199,20 @@ func TestNodesCommand_WithMocks(t *testing.T) {
 	defer ResetClientFactory()
 
 	// Get client and call Nodes
-	client := GetClient()
+	client, err := GetClient()
+	if err != nil {
+		t.Fatalf("GetClient() error = %v", err)
+	}
 	nodes, err := client.Nodes(ctx)
-	
+
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	
+
 	if len(nodes) != 2 {
 		t.Errorf("Expected 2 nodes, got %d", len(nodes))
 	}
-	
+
 	if nodes[0].Node != "pve1" {
 		t.Errorf("Expected first node to be pve1, got %s", nodes[0].Node)
 	}
@@ -211,13 +226,13 @@ func TestContainerOperations_WithMocks(t *testing.T) {
 	mockClient := mocks.NewMockProxmoxClientInterface(ctrl)
 	mockNode := mocks.NewMockNodeInterface(ctrl)
 	mockContainer := mocks.NewMockContainerInterface(ctrl)
-	
+
 	ctx := context.Background()
-	
+
 	// Set up expectations
 	mockClient.EXPECT().Node(ctx, "pve").Return(mockNode, nil)
 	mockNode.EXPECT().Container(ctx, 100).Return(mockContainer, nil)
-	
+
 	expectedTask := &proxmox.Task{
 		UPID: proxmox.UPID("UPID:pve:00001234:00112233:65432100:start"),
 	}
@@ -230,23 +245,109 @@ func TestContainerOperations_WithMocks(t *testing.T) {
 	defer ResetClientFactory()
 
 	// Test the flow
-	client := GetClient()
+	client, err := GetClient()
+	if err != nil {
+		t.Fatalf("GetClient() error = %v", err)
+	}
 	node, err := client.Node(ctx, "pve")
 	if err != nil {
 		t.Fatalf("Unexpected error getting node: %v", err)
 	}
-	
+
 	container, err := node.Container(ctx, 100)
 	if err != nil {
 		t.Fatalf("Unexpected error getting container: %v", err)
 	}
-	
+
 	task, err := container.Start(ctx)
 	if err != nil {
 		t.Fatalf("Unexpected error starting container: %v", err)
 	}
-	
+
 	if task.UPID != expectedTask.UPID {
 		t.Errorf("Expected UPID %s, got %s", expectedTask.UPID, task.UPID)
+	}
+}
+
+func TestNormalizeServerURL(t *testing.T) {
+	got, err := NormalizeServerURL("pve.example.com:8006/api2/json/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "https://pve.example.com:8006" {
+		t.Fatalf("NormalizeServerURL() = %q", got)
+	}
+	if _, err := NormalizeServerURL("ftp://pve.example.com"); err == nil {
+		t.Fatal("expected unsupported scheme error")
+	}
+	if _, err := NormalizeServerURL("http://pve.example.com"); err == nil {
+		t.Fatal("expected plaintext HTTP to be rejected")
+	}
+}
+
+func TestWaitForCompletedTask(t *testing.T) {
+	if err := WaitForTask(context.Background(), &proxmox.Task{IsSuccessful: true}, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := WaitForTask(context.Background(), &proxmox.Task{IsFailed: true, ExitStatus: "failed"}, time.Second); err == nil {
+		t.Fatal("expected failed task error")
+	}
+	if err := WaitForTask(context.Background(), nil, time.Second); err == nil {
+		t.Fatal("expected nil task error")
+	}
+}
+
+func TestNewHTTPClientTLSDefaults(t *testing.T) {
+	client, err := NewHTTPClient(false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport type = %T", client.Transport)
+	}
+	if transport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("TLS verification must be enabled by default")
+	}
+	if transport.TLSClientConfig.MinVersion != tls.VersionTLS12 {
+		t.Fatal("minimum TLS version must be TLS 1.2")
+	}
+}
+
+func TestWriteConfigPermissions(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	path := filepath.Join(t.TempDir(), "config", "config.json")
+	t.Setenv("PROXMOX_CLI_CONFIG", path)
+	viper.Set("server_url", "https://pve.example.com:8006")
+	if err := WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("config permissions = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestLoadConfigSecuresLegacyFile(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("PROXMOX_CLI_CONFIG", path)
+	if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := LoadConfig(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("legacy config permissions = %o, want 600", info.Mode().Perm())
 	}
 }

@@ -29,9 +29,7 @@ clean: ## Remove build artifacts
 # Run all tests
 .PHONY: test
 test: ## Run all tests (unit + BDD)
-	@echo "🧪 Running unit tests..."
-	go test -v -short ./cmd/...
-	@echo "🧪 Running BDD integration tests..."
+	@echo "🧪 Running tests..."
 	go test -v ./...
 	@echo "✅ All tests completed"
 
@@ -39,7 +37,7 @@ test: ## Run all tests (unit + BDD)
 .PHONY: test-bdd
 test-bdd: ## Run BDD/Gherkin tests
 	@echo "🥒 Running BDD tests..."
-	go test -v -tags=bdd ./...
+	go test -v ./test/bdd
 	@echo "✅ BDD tests completed"
 
 # Run unit tests only (excluding BDD tests)
@@ -70,6 +68,10 @@ fmt: ## Format Go code
 	@echo "🎨 Formatting code..."
 	go fmt ./...
 	@echo "✅ Code formatted"
+
+.PHONY: generate
+generate: ## Regenerate GoMock implementations
+	go generate ./internal/interfaces
 
 # Run go vet
 .PHONY: vet

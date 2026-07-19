@@ -1,7 +1,7 @@
 package bdd_test
 
 import (
-	"proxmox-cli/test/bdd"
+	"github.com/Adz-ai/proxmox-cli/test/bdd"
 	"testing"
 
 	"github.com/cucumber/godog"

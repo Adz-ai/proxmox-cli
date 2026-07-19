@@ -6,7 +6,7 @@ import (
 	"github.com/luthermonson/go-proxmox"
 )
 
-//go:generate mockgen -destination=../../test/mocks/proxmox_client.go -package=mocks proxmox-cli/internal/interfaces ProxmoxClientInterface,NodeInterface,ContainerInterface,VirtualMachineInterface,VirtualMachineCreator,ContainerCreator
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=../../test/mocks/proxmox_client.go -package=mocks github.com/Adz-ai/proxmox-cli/internal/interfaces ProxmoxClientInterface,NodeInterface,ContainerInterface,VirtualMachineInterface
 
 // ProxmoxClientInterface defines the interface that both real and mock clients must implement
 type ProxmoxClientInterface interface {
@@ -31,28 +31,32 @@ type ContainerInterface interface {
 	Stop(ctx context.Context) (*proxmox.Task, error)
 	Shutdown(ctx context.Context, force bool, timeout int) (*proxmox.Task, error)
 	Reboot(ctx context.Context) (*proxmox.Task, error)
-	Delete(ctx context.Context) (*proxmox.Task, error)
+	Delete(ctx context.Context, options *proxmox.ContainerDeleteOptions) (*proxmox.Task, error)
 	Clone(ctx context.Context, options *proxmox.ContainerCloneOptions) (int, *proxmox.Task, error)
 	Snapshots(ctx context.Context) ([]*proxmox.ContainerSnapshot, error)
 }
 
 // VirtualMachineInterface defines the interface for VM operations
 type VirtualMachineInterface interface {
+	Details() VirtualMachineDetails
 	Start(ctx context.Context) (*proxmox.Task, error)
 	Stop(ctx context.Context) (*proxmox.Task, error)
 	Shutdown(ctx context.Context) (*proxmox.Task, error)
 	Reboot(ctx context.Context) (*proxmox.Task, error)
-	Delete(ctx context.Context) (*proxmox.Task, error)
+	Delete(ctx context.Context, options *proxmox.VirtualMachineDeleteOptions) (*proxmox.Task, error)
 	Clone(ctx context.Context, options *proxmox.VirtualMachineCloneOptions) (int, *proxmox.Task, error)
 }
 
-// VirtualMachineCreator interface for creating VMs
-type VirtualMachineCreator interface {
-	Create(ctx context.Context, node NodeInterface, vmid int, options ...proxmox.VirtualMachineOption) (*proxmox.Task, error)
+type VirtualMachineDetails struct {
+	Name      string
+	Node      string
+	Status    string
+	Tags      string
+	CPUs      int
+	CPU       float64
+	Memory    uint64
+	MaxMemory uint64
+	Disk      uint64
+	MaxDisk   uint64
+	Uptime    uint64
 }
-
-// ContainerCreator interface for creating containers
-type ContainerCreator interface {
-	Create(ctx context.Context, node NodeInterface, vmid int, options ...proxmox.ContainerOption) (*proxmox.Task, error)
-}
-

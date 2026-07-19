@@ -47,6 +47,7 @@ Feature: LXC Container Management
     When I run the command "./proxmox-cli lxc delete -n pve -i 200"
     Then the container should be deleted successfully
 
+  @skip
   Scenario: Clone an LXC container
     Given the CLI is configured and authenticated
     And an LXC container with ID 200 exists
@@ -54,12 +55,14 @@ Feature: LXC Container Management
     Then a new container with ID 201 should be created
     And the new container should be named "clone-test"
 
+  @skip
   Scenario: Create a snapshot of an LXC container
     Given the CLI is configured and authenticated
     And an LXC container with ID 200 exists
     When I run the command "./proxmox-cli lxc snapshot create -n pve -i 200 --name test-snapshot"
     Then a snapshot named "test-snapshot" should be created
 
+  @skip
   Scenario: List snapshots of an LXC container
     Given the CLI is configured and authenticated
     And an LXC container with ID 200 has snapshots

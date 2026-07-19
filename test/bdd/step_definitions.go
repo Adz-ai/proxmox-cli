@@ -10,37 +10,40 @@ import (
 	"strings"
 
 	"github.com/cucumber/godog"
-	"github.com/golang/mock/gomock"
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/viper"
-	
-	"proxmox-cli/cmd"
-	"proxmox-cli/cmd/utility"
-	"proxmox-cli/internal/interfaces"
-	"proxmox-cli/test/mocks"
+	"go.uber.org/mock/gomock"
+
+	"github.com/Adz-ai/proxmox-cli/cmd"
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
+	"github.com/Adz-ai/proxmox-cli/test/mocks"
 )
 
 type TestContext struct {
-	ctrl              *gomock.Controller
-	mockClient        *mocks.MockProxmoxClientInterface
-	mockNode          *mocks.MockNodeInterface
-	mockContainer     *mocks.MockContainerInterface
-	mockVM            *mocks.MockVirtualMachineInterface
-	
-	configDir         string
-	originalConfigDir string
-	specFilePath      string
-	commandOutput     bytes.Buffer
-	commandError      error
-	
+	ctrl          *gomock.Controller
+	mockClient    *mocks.MockProxmoxClientInterface
+	mockNode      *mocks.MockNodeInterface
+	mockContainer *mocks.MockContainerInterface
+	mockVM        *mocks.MockVirtualMachineInterface
+
+	configDir          string
+	originalConfigDir  string
+	originalConfigFile string
+	hadConfigFile      bool
+	specFilePath       string
+	commandOutput      bytes.Buffer
+	commandError       error
+
 	// Track created resources for cleanup
-	createdVMs        []int
-	createdLXCs       []int
-	
+	createdVMs  []int
+	createdLXCs []int
+
 	// Track state
-	vmId              int
-	lxcId             int
-	nodeName          string
+	vmId             int
+	lxcId            int
+	nodeName         string
+	containerOptions map[string]any
 }
 
 func InitializeScenario(ctx *godog.ScenarioContext) {
@@ -50,6 +53,10 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	}
 
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
+		testCtx.commandOutput.Reset()
+		testCtx.commandError = nil
+		testCtx.specFilePath = ""
+		testCtx.containerOptions = make(map[string]any)
 		testCtx.ctrl = gomock.NewController(&testingT{})
 		testCtx.setupMocks()
 		testCtx.setupTestConfig()
@@ -135,10 +142,12 @@ func (t *TestContext) setupTestConfig() {
 
 	// Save original config directory
 	t.originalConfigDir = os.Getenv("HOME")
-	
+	t.originalConfigFile, t.hadConfigFile = os.LookupEnv("PROXMOX_CLI_CONFIG")
+
 	// Set HOME to temp directory so config is saved there
 	os.Setenv("HOME", tempDir)
-	
+	os.Setenv("PROXMOX_CLI_CONFIG", filepath.Join(tempDir, ".proxmox-cli", "config.json"))
+
 	// Reset viper to use new config location
 	viper.Reset()
 	viper.SetConfigName("config")
@@ -150,6 +159,13 @@ func (t *TestContext) cleanup() {
 	// Restore original HOME
 	if t.originalConfigDir != "" {
 		os.Setenv("HOME", t.originalConfigDir)
+	} else {
+		os.Unsetenv("HOME")
+	}
+	if t.hadConfigFile {
+		os.Setenv("PROXMOX_CLI_CONFIG", t.originalConfigFile)
+	} else {
+		os.Unsetenv("PROXMOX_CLI_CONFIG")
 	}
 
 	// Clean up temp directory
@@ -164,6 +180,7 @@ func (t *TestContext) cleanup() {
 
 	// Reset client factory
 	utility.ResetClientFactory()
+	viper.Reset()
 }
 
 // Auth step implementations
@@ -176,12 +193,8 @@ func (t *TestContext) theCLIIsNotConfigured() error {
 }
 
 func (t *TestContext) theCLIIsConfiguredWithServer(serverURL string) error {
-	configPath := filepath.Join(t.configDir, ".proxmox-cli")
-	os.MkdirAll(configPath, 0755)
-	
 	viper.Set("server_url", serverURL)
-	viper.SetConfigFile(filepath.Join(configPath, "config.json"))
-	return viper.WriteConfig()
+	return utility.WriteConfig()
 }
 
 func (t *TestContext) theCLIIsConfiguredAndAuthenticated() error {
@@ -190,7 +203,7 @@ func (t *TestContext) theCLIIsConfiguredAndAuthenticated() error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Then add auth
 	viper.Set("auth_ticket.ticket", "PVE:root@pam:1234567890::abcdef")
 	viper.Set("auth_ticket.CSRFPreventionToken", "1234567890:abcdef")
@@ -205,18 +218,18 @@ func (t *TestContext) iRunCommand(command string) error {
 	// Replace placeholders
 	command = strings.Replace(command, "test-lxc.yaml", t.specFilePath, -1)
 	command = strings.Replace(command, "test-vm.yaml", t.specFilePath, -1)
-	
+
 	// Parse command
 	parts := strings.Split(command, " ")
 	if len(parts) < 2 {
 		return fmt.Errorf("invalid command: %s", command)
 	}
-	
+
 	// Remove "./proxmox-cli" prefix if present
 	if parts[0] == "./proxmox-cli" {
 		parts = parts[1:]
 	}
-	
+
 	// Track resource IDs from command
 	for i, part := range parts {
 		if part == "-i" && i+1 < len(parts) {
@@ -234,23 +247,23 @@ func (t *TestContext) iRunCommand(command string) error {
 			t.nodeName = parts[i+1]
 		}
 	}
-	
+
 	// Reset output buffer
 	t.commandOutput.Reset()
-	
+
 	// Set up expectations based on command
 	if err := t.setupExpectations(parts); err != nil {
 		return err
 	}
-	
+
 	// Execute command through CLI
 	rootCmd := cmd.NewRootCmd()
 	rootCmd.SetOut(&t.commandOutput)
 	rootCmd.SetErr(&t.commandOutput)
 	rootCmd.SetArgs(parts) // Use all parts after prefix removal
-	
+
 	t.commandError = rootCmd.Execute()
-	
+
 	return nil
 }
 
@@ -258,11 +271,11 @@ func (t *TestContext) setupExpectations(parts []string) error {
 	if len(parts) < 1 {
 		return nil
 	}
-	
+
 	// Check if we're in an authenticated state
 	authTicket := viper.GetString("auth_ticket.ticket")
 	isAuthenticated := authTicket != ""
-	
+
 	// For commands that require auth, don't set up mocks if not authenticated
 	requiresAuth := false
 	switch parts[0] {
@@ -271,14 +284,14 @@ func (t *TestContext) setupExpectations(parts []string) error {
 			requiresAuth = true
 		}
 	}
-	
+
 	if requiresAuth && !isAuthenticated {
 		// Don't set up mocks for unauthenticated requests
 		return nil
 	}
-	
+
 	ctx := gomock.Any() // We'll match any context
-	
+
 	switch parts[0] {
 	case "nodes":
 		if len(parts) > 1 {
@@ -290,7 +303,7 @@ func (t *TestContext) setupExpectations(parts []string) error {
 					&proxmox.NodeStatus{Node: "pve2", Status: "online", Type: "node", Uptime: 432000},
 				}
 				t.mockClient.EXPECT().Nodes(ctx).Return(nodes, nil)
-				
+
 			case "describe":
 				// Find node name from args
 				nodeName := "pve"
@@ -300,29 +313,29 @@ func (t *TestContext) setupExpectations(parts []string) error {
 						break
 					}
 				}
-				
+
 				// Mock getting specific node
 				t.mockClient.EXPECT().Node(ctx, nodeName).Return(t.mockNode, nil)
-				
+
 				// Mock getting nodes list for status
 				nodes := proxmox.NodeStatuses{
 					&proxmox.NodeStatus{
-						Node: nodeName, 
-						Status: "online", 
-						Type: "node", 
-						Uptime: 432000,
-						MaxCPU: 8,
-						CPU: 0.25,
-						MaxMem: 17179869184, // 16GB
-						Mem: 8589934592,     // 8GB 
+						Node:    nodeName,
+						Status:  "online",
+						Type:    "node",
+						Uptime:  432000,
+						MaxCPU:  8,
+						CPU:     0.25,
+						MaxMem:  17179869184,  // 16GB
+						Mem:     8589934592,   // 8GB
 						MaxDisk: 107374182400, // 100GB
-						Disk: 53687091200,     // 50GB
+						Disk:    53687091200,  // 50GB
 					},
 				}
 				t.mockClient.EXPECT().Nodes(ctx).Return(nodes, nil)
 			}
 		}
-		
+
 	case "lxc":
 		if len(parts) > 1 {
 			switch parts[1] {
@@ -332,49 +345,57 @@ func (t *TestContext) setupExpectations(parts []string) error {
 					&proxmox.NodeStatus{Node: "pve", Status: "online"},
 				}
 				t.mockClient.EXPECT().Nodes(ctx).Return(nodes, nil)
-				
+
 				// Mock getting node and containers
 				t.mockClient.EXPECT().Node(ctx, "pve").Return(t.mockNode, nil)
-				
+
 				containers := proxmox.Containers{
 					&proxmox.Container{VMID: 200, Name: "test-ct-1", Status: "running", Uptime: 86400},
 					&proxmox.Container{VMID: 201, Name: "test-ct-2", Status: "stopped", Uptime: 0},
 				}
 				t.mockNode.EXPECT().Containers(ctx).Return(containers, nil)
-				
+
 			case "create":
 				// Mock node lookup
 				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
-				
+
 				// Mock container creation
-				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:create", t.nodeName))}
-				t.mockNode.EXPECT().NewContainer(ctx, t.lxcId, gomock.Any()).Return(task, nil)
-				
+				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:create", t.nodeName)), IsSuccessful: true}
+				t.mockNode.EXPECT().NewContainer(ctx, t.lxcId,
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).DoAndReturn(func(_ context.Context, _ int, options ...proxmox.ContainerOption) (*proxmox.Task, error) {
+					for _, option := range options {
+						t.containerOptions[option.Name] = option.Value
+					}
+					return task, nil
+				})
+
 			case "start", "stop", "delete":
 				// Mock getting node and container
 				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
 				t.mockNode.EXPECT().Container(ctx, t.lxcId).Return(t.mockContainer, nil)
-				
+
 				// Mock the operation
-				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:%s", t.nodeName, parts[1]))}
+				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:%s", t.nodeName, parts[1])), IsSuccessful: true}
 				switch parts[1] {
 				case "start":
 					t.mockContainer.EXPECT().Start(ctx).Return(task, nil)
 				case "stop":
 					t.mockContainer.EXPECT().Stop(ctx).Return(task, nil)
 				case "delete":
-					t.mockContainer.EXPECT().Delete(ctx).Return(task, nil)
+					t.mockContainer.EXPECT().Delete(ctx, gomock.Any()).Return(task, nil)
 				}
-				
+
 			case "describe":
 				// Mock getting node and container with details
 				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
-				
+
 				// For describe, we'd need to mock the container retrieval
 				// This is simplified - in reality you'd need more complex mocking
 			}
 		}
-		
+
 	case "vm":
 		if len(parts) > 1 {
 			switch parts[1] {
@@ -384,35 +405,35 @@ func (t *TestContext) setupExpectations(parts []string) error {
 					&proxmox.NodeStatus{Node: "pve", Status: "online"},
 				}
 				t.mockClient.EXPECT().Nodes(ctx).Return(nodes, nil)
-				
+
 				// Mock getting node and VMs
 				t.mockClient.EXPECT().Node(ctx, "pve").Return(t.mockNode, nil)
-				
+
 				vms := proxmox.VirtualMachines{
 					&proxmox.VirtualMachine{VMID: 100, Name: "test-vm-1", Status: "running"},
 					&proxmox.VirtualMachine{VMID: 101, Name: "test-vm-2", Status: "stopped"},
 				}
 				t.mockNode.EXPECT().VirtualMachines(ctx).Return(vms, nil)
-				
+
 			case "create":
 				// Mock node lookup
 				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
-				
+
 				// Mock VM creation
-				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:create", t.nodeName))}
+				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:create", t.nodeName)), IsSuccessful: true}
 				t.mockNode.EXPECT().NewVirtualMachine(ctx, t.vmId, gomock.Any()).Return(task, nil)
-				
+
 			case "delete":
 				// Mock getting node and VM
 				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
 				t.mockNode.EXPECT().VirtualMachine(ctx, t.vmId).Return(t.mockVM, nil)
-				
+
 				// Mock deletion
-				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:delete", t.nodeName))}
-				t.mockVM.EXPECT().Delete(ctx).Return(task, nil)
+				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:delete", t.nodeName)), IsSuccessful: true}
+				t.mockVM.EXPECT().Delete(ctx, gomock.Any()).Return(task, nil)
 			}
 		}
-		
+
 	case "status":
 		// Status command may check version
 		verbose := false
@@ -422,7 +443,7 @@ func (t *TestContext) setupExpectations(parts []string) error {
 				break
 			}
 		}
-		
+
 		if verbose {
 			// Mock version check
 			version := &proxmox.Version{
@@ -430,21 +451,21 @@ func (t *TestContext) setupExpectations(parts []string) error {
 				Version: "pve-manager/7.4-3/9002ab8a",
 			}
 			t.mockClient.EXPECT().Version(ctx).Return(version, nil)
-			
+
 			// Mock nodes for cluster info
 			nodes := proxmox.NodeStatuses{
 				&proxmox.NodeStatus{Node: "pve", Status: "online"},
 			}
 			t.mockClient.EXPECT().Nodes(ctx).Return(nodes, nil)
 		}
-		
+
 	case "auth":
 		if len(parts) > 1 && parts[1] == "login" {
 			// For login tests, we don't mock anything since login creates its own client
 			// The test expectations should handle the failure cases
 		}
 	}
-	
+
 	return nil
 }
 
@@ -452,39 +473,39 @@ func (t *TestContext) iRunCommandWithInput(command string, input *godog.DocStrin
 	// Replace placeholders
 	command = strings.Replace(command, "test-lxc.yaml", t.specFilePath, -1)
 	command = strings.Replace(command, "test-vm.yaml", t.specFilePath, -1)
-	
+
 	// Parse command
 	parts := strings.Split(command, " ")
 	if len(parts) < 2 {
 		return fmt.Errorf("invalid command: %s", command)
 	}
-	
+
 	// Remove "./proxmox-cli" prefix if present
 	if parts[0] == "./proxmox-cli" {
 		parts = parts[1:]
 	}
-	
+
 	// Reset output buffer
 	t.commandOutput.Reset()
-	
+
 	// Set up expectations based on command
 	if err := t.setupExpectations(parts); err != nil {
 		return err
 	}
-	
+
 	// Execute command through CLI with input
 	rootCmd := cmd.NewRootCmd()
 	rootCmd.SetOut(&t.commandOutput)
 	rootCmd.SetErr(&t.commandOutput)
-	
+
 	// Set stdin to the provided input
 	inputReader := strings.NewReader(strings.TrimSpace(input.Content) + "\n")
 	rootCmd.SetIn(inputReader)
-	
+
 	rootCmd.SetArgs(parts)
-	
+
 	t.commandError = rootCmd.Execute()
-	
+
 	return nil
 }
 
@@ -492,39 +513,39 @@ func (t *TestContext) iRunCommandWithPassword(command, password string) error {
 	// Replace placeholders
 	command = strings.Replace(command, "test-lxc.yaml", t.specFilePath, -1)
 	command = strings.Replace(command, "test-vm.yaml", t.specFilePath, -1)
-	
-	// Parse command  
+
+	// Parse command
 	parts := strings.Split(command, " ")
 	if len(parts) < 2 {
 		return fmt.Errorf("invalid command: %s", command)
 	}
-	
+
 	// Remove "./proxmox-cli" prefix if present
 	if parts[0] == "./proxmox-cli" {
 		parts = parts[1:]
 	}
-	
+
 	// Reset output buffer
 	t.commandOutput.Reset()
-	
+
 	// Set up expectations based on command
 	if err := t.setupExpectations(parts); err != nil {
 		return err
 	}
-	
+
 	// Execute command through CLI with password as input
 	rootCmd := cmd.NewRootCmd()
 	rootCmd.SetOut(&t.commandOutput)
 	rootCmd.SetErr(&t.commandOutput)
-	
+
 	// Set stdin to the password
 	inputReader := strings.NewReader(password + "\n")
 	rootCmd.SetIn(inputReader)
-	
+
 	rootCmd.SetArgs(parts)
-	
+
 	t.commandError = rootCmd.Execute()
-	
+
 	return nil
 }
 
@@ -552,7 +573,7 @@ func (t *TestContext) aValidLXCYAMLSpecFileWithContent(content *godog.DocString)
 	if err != nil {
 		return err
 	}
-	
+
 	t.specFilePath = filepath.Join(dir, "lxc_spec.yaml")
 	return os.WriteFile(t.specFilePath, []byte(content.Content), 0644)
 }
@@ -565,12 +586,16 @@ func (t *TestContext) theLXCContainerShouldBeCreatedSuccessfully() error {
 }
 
 func (t *TestContext) theContainerShouldHaveCores(cores int) error {
-	// This would be verified in the describe command
+	if got := t.containerOptions["cores"]; got != cores {
+		return fmt.Errorf("container cores = %v, want %d", got, cores)
+	}
 	return nil
 }
 
 func (t *TestContext) theContainerShouldHaveMemory(memory int) error {
-	// This would be verified in the describe command
+	if got := t.containerOptions["memory"]; got != memory {
+		return fmt.Errorf("container memory = %v, want %d", got, memory)
+	}
 	return nil
 }
 
@@ -620,27 +645,27 @@ func (t *TestContext) aProxmoxClusterWithMultipleNodes() error {
 
 func (t *TestContext) iShouldSeeListOfNodesWithStatus() error {
 	output := t.commandOutput.String()
-	
+
 	// Check for header
 	if !strings.Contains(output, "Nodes in cluster:") {
 		return fmt.Errorf("expected to see 'Nodes in cluster:' header")
 	}
-	
+
 	// Check for column headers
 	if !strings.Contains(output, "Node") || !strings.Contains(output, "Status") {
 		return fmt.Errorf("expected to see column headers")
 	}
-	
+
 	// Check for the nodes we mocked
 	if !strings.Contains(output, "pve") || !strings.Contains(output, "pve2") {
 		return fmt.Errorf("expected to see nodes 'pve' and 'pve2' in output")
 	}
-	
+
 	// Check status
 	if !strings.Contains(output, "online") {
 		return fmt.Errorf("expected to see 'online' status")
 	}
-	
+
 	return nil
 }
 
@@ -651,64 +676,64 @@ func (t *TestContext) aNodeExistsInCluster(nodeName string) error {
 
 func (t *TestContext) iShouldSeeDetailedNodeInfo() error {
 	output := t.commandOutput.String()
-	
+
 	// Check for header
 	if !strings.Contains(output, "Node Information") {
 		return fmt.Errorf("expected to see 'Node Information' header")
 	}
-	
+
 	// Check basic node info
 	if !strings.Contains(output, "Name:") || !strings.Contains(output, "Status:") {
 		return fmt.Errorf("expected to see basic node information")
 	}
-	
+
 	return nil
 }
 
 func (t *TestContext) iShouldSeeCPUUsageInfo() error {
 	output := t.commandOutput.String()
-	
+
 	// Check for CPU information
 	if !strings.Contains(output, "CPU Usage:") {
 		return fmt.Errorf("expected to see 'CPU Usage:' in output")
 	}
-	
+
 	if !strings.Contains(output, "CPU Cores:") {
 		return fmt.Errorf("expected to see 'CPU Cores:' in output")
 	}
-	
+
 	return nil
 }
 
 func (t *TestContext) iShouldSeeMemoryUsageInfo() error {
 	output := t.commandOutput.String()
-	
+
 	// Check for memory information
 	if !strings.Contains(output, "Memory:") {
 		return fmt.Errorf("expected to see 'Memory:' in output")
 	}
-	
+
 	// Should show GB values
 	if !strings.Contains(output, "GB") {
 		return fmt.Errorf("expected memory to be shown in GB")
 	}
-	
+
 	return nil
 }
 
 func (t *TestContext) iShouldSeeDiskUsageInfo() error {
 	output := t.commandOutput.String()
-	
+
 	// Check for disk information
 	if !strings.Contains(output, "Disk:") {
 		return fmt.Errorf("expected to see 'Disk:' in output")
 	}
-	
+
 	// Should show GB values
 	if !strings.Contains(output, "GB") {
 		return fmt.Errorf("expected disk to be shown in GB")
 	}
-	
+
 	return nil
 }
 
@@ -793,7 +818,7 @@ func (t *TestContext) aValidYAMLSpecFileWithContent(content *godog.DocString) er
 	if err != nil {
 		return err
 	}
-	
+
 	t.specFilePath = filepath.Join(dir, "vm_spec.yaml")
 	return os.WriteFile(t.specFilePath, []byte(content.Content), 0644)
 }
@@ -809,7 +834,7 @@ func (t *TestContext) theVirtualMachineShouldBeCreatedSuccessfully() error {
 type testingT struct{}
 
 func (t *testingT) Errorf(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
+	panic(fmt.Sprintf(format, args...))
 }
 
 func (t *testingT) Fatalf(format string, args ...interface{}) {

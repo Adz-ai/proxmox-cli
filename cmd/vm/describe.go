@@ -3,11 +3,12 @@ package vm
 import (
 	"context"
 	"fmt"
-	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 	"io"
 	"strings"
 	"time"
 
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
 	"github.com/spf13/cobra"
 )
 
@@ -33,8 +34,12 @@ func newDescribeCmd() *cobra.Command {
 			if vmID <= 0 {
 				return fmt.Errorf("validate id: id must be positive")
 			}
+			format, err := utility.OutputFormat(cmd)
+			if err != nil {
+				return err
+			}
 
-			if err := describeVirtualMachine(cmd.Context(), out, node, vmID); err != nil {
+			if err := describeVirtualMachine(cmd.Context(), out, node, vmID, format); err != nil {
 				return fmt.Errorf("describe virtual machine %d on node %q: %w", vmID, node, err)
 			}
 			return nil
@@ -49,11 +54,12 @@ func newDescribeCmd() *cobra.Command {
 	if err := cmd.MarkFlagRequired("id"); err != nil {
 		panic(err)
 	}
+	utility.AddOutputFlag(cmd)
 
 	return cmd
 }
 
-func describeVirtualMachine(ctx context.Context, out io.Writer, node string, vmID int) error {
+func describeVirtualMachine(ctx context.Context, out io.Writer, node string, vmID int, format string) error {
 	client, err := utility.AuthenticatedClient()
 	if err != nil {
 		return fmt.Errorf("authenticate Proxmox client: %w", err)
@@ -69,6 +75,13 @@ func describeVirtualMachine(ctx context.Context, out io.Writer, node string, vmI
 		return fmt.Errorf("get VM %d: %w", vmID, err)
 	}
 	details := vm.Details()
+
+	if format == "json" {
+		return utility.PrintJSON(out, struct {
+			VMID int `json:"vmid"`
+			interfaces.VirtualMachineDetails
+		}{vmID, details})
+	}
 
 	fmt.Fprintln(out, "VM Details")
 	fmt.Fprintln(out, "==========")

@@ -6,7 +6,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/cobra"
@@ -68,7 +67,7 @@ func newCreateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("create container %d: %w", vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, 10*time.Minute); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
 				return fmt.Errorf("create container %d: %w", vmid, err)
 			}
 

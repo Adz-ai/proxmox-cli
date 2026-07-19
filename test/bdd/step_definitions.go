@@ -45,6 +45,7 @@ type TestContext struct {
 	nodeName         string
 	containerOptions map[string]any
 	snapshotName     string
+	cloneOptions     *proxmox.ContainerCloneOptions
 }
 
 func InitializeScenario(ctx *godog.ScenarioContext) {
@@ -59,6 +60,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 		testCtx.specFilePath = ""
 		testCtx.containerOptions = make(map[string]any)
 		testCtx.snapshotName = ""
+		testCtx.cloneOptions = nil
 		testCtx.ctrl = gomock.NewController(&testingT{})
 		testCtx.setupMocks()
 		testCtx.setupTestConfig()
@@ -91,6 +93,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I should see a list of all LXC containers$`, testCtx.iShouldSeeListOfLXCContainers)
 	ctx.Step(`^an LXC container with ID (\d+) exists$`, testCtx.anLXCContainerExists)
 	ctx.Step(`^an LXC container with ID (\d+) has snapshots$`, testCtx.anLXCContainerHasSnapshots)
+	ctx.Step(`^a new container with ID (\d+) should be created$`, testCtx.aNewContainerWithIDShouldBeCreated)
+	ctx.Step(`^the new container should be named "([^"]*)"$`, testCtx.theNewContainerShouldBeNamed)
 	ctx.Step(`^a snapshot named "([^"]*)" should be created$`, testCtx.aSnapshotNamedShouldBeCreated)
 	ctx.Step(`^I should see a list of all snapshots$`, testCtx.iShouldSeeAListOfAllSnapshots)
 	ctx.Step(`^an LXC container with ID (\d+) is stopped$`, testCtx.anLXCContainerIsStopped)
@@ -150,8 +154,8 @@ func (t *TestContext) setupTestConfig() {
 	t.originalConfigFile, t.hadConfigFile = os.LookupEnv("PROXMOX_CLI_CONFIG")
 
 	// Set HOME to temp directory so config is saved there
-	os.Setenv("HOME", tempDir)
-	os.Setenv("PROXMOX_CLI_CONFIG", filepath.Join(tempDir, ".proxmox-cli", "config.json"))
+	_ = os.Setenv("HOME", tempDir)
+	_ = os.Setenv("PROXMOX_CLI_CONFIG", filepath.Join(tempDir, ".proxmox-cli", "config.json"))
 
 	// Reset viper to use new config location
 	viper.Reset()
@@ -163,24 +167,24 @@ func (t *TestContext) setupTestConfig() {
 func (t *TestContext) cleanup() {
 	// Restore original HOME
 	if t.originalConfigDir != "" {
-		os.Setenv("HOME", t.originalConfigDir)
+		_ = os.Setenv("HOME", t.originalConfigDir)
 	} else {
-		os.Unsetenv("HOME")
+		_ = os.Unsetenv("HOME")
 	}
 	if t.hadConfigFile {
-		os.Setenv("PROXMOX_CLI_CONFIG", t.originalConfigFile)
+		_ = os.Setenv("PROXMOX_CLI_CONFIG", t.originalConfigFile)
 	} else {
-		os.Unsetenv("PROXMOX_CLI_CONFIG")
+		_ = os.Unsetenv("PROXMOX_CLI_CONFIG")
 	}
 
 	// Clean up temp directory
 	if t.configDir != "" {
-		os.RemoveAll(t.configDir)
+		_ = os.RemoveAll(t.configDir)
 	}
 
 	// Clean up spec files
 	if t.specFilePath != "" {
-		os.RemoveAll(filepath.Dir(t.specFilePath))
+		_ = os.RemoveAll(filepath.Dir(t.specFilePath))
 	}
 
 	// Reset client factory
@@ -192,7 +196,7 @@ func (t *TestContext) cleanup() {
 func (t *TestContext) theCLIIsNotConfigured() error {
 	// Ensure config directory doesn't exist
 	configPath := filepath.Join(t.configDir, ".proxmox-cli")
-	os.RemoveAll(configPath)
+	_ = os.RemoveAll(configPath)
 	viper.Reset()
 	return nil
 }
@@ -221,8 +225,8 @@ func (t *TestContext) theCLIIsConfiguredButNotAuthenticated() error {
 
 func (t *TestContext) iRunCommand(command string) error {
 	// Replace placeholders
-	command = strings.Replace(command, "test-lxc.yaml", t.specFilePath, -1)
-	command = strings.Replace(command, "test-vm.yaml", t.specFilePath, -1)
+	command = strings.ReplaceAll(command, "test-lxc.yaml", t.specFilePath)
+	command = strings.ReplaceAll(command, "test-vm.yaml", t.specFilePath)
 
 	// Parse command
 	parts := strings.Split(command, " ")
@@ -392,6 +396,21 @@ func (t *TestContext) setupExpectations(parts []string) error {
 					t.mockContainer.EXPECT().Delete(ctx, gomock.Any()).Return(task, nil)
 				}
 
+			case "clone":
+				source := 0
+				for i, part := range parts {
+					if part == "-s" && i+1 < len(parts) {
+						source, _ = strconv.Atoi(parts[i+1])
+					}
+				}
+				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
+				t.mockNode.EXPECT().Container(ctx, source).Return(t.mockContainer, nil)
+				task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:vzclone", t.nodeName)), IsSuccessful: true}
+				t.mockContainer.EXPECT().Clone(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, options *proxmox.ContainerCloneOptions) (int, *proxmox.Task, error) {
+					t.cloneOptions = options
+					return options.NewID, task, nil
+				})
+
 			case "snapshot":
 				if len(parts) < 3 {
 					break
@@ -487,10 +506,7 @@ func (t *TestContext) setupExpectations(parts []string) error {
 		}
 
 	case "auth":
-		if len(parts) > 1 && parts[1] == "login" {
-			// For login tests, we don't mock anything since login creates its own client
-			// The test expectations should handle the failure cases
-		}
+		// Login creates its own client, so no mocks are needed.
 	}
 
 	return nil
@@ -498,8 +514,8 @@ func (t *TestContext) setupExpectations(parts []string) error {
 
 func (t *TestContext) iRunCommandWithInput(command string, input *godog.DocString) error {
 	// Replace placeholders
-	command = strings.Replace(command, "test-lxc.yaml", t.specFilePath, -1)
-	command = strings.Replace(command, "test-vm.yaml", t.specFilePath, -1)
+	command = strings.ReplaceAll(command, "test-lxc.yaml", t.specFilePath)
+	command = strings.ReplaceAll(command, "test-vm.yaml", t.specFilePath)
 
 	// Parse command
 	parts := strings.Split(command, " ")
@@ -538,8 +554,8 @@ func (t *TestContext) iRunCommandWithInput(command string, input *godog.DocStrin
 
 func (t *TestContext) iRunCommandWithPassword(command, password string) error {
 	// Replace placeholders
-	command = strings.Replace(command, "test-lxc.yaml", t.specFilePath, -1)
-	command = strings.Replace(command, "test-vm.yaml", t.specFilePath, -1)
+	command = strings.ReplaceAll(command, "test-lxc.yaml", t.specFilePath)
+	command = strings.ReplaceAll(command, "test-vm.yaml", t.specFilePath)
 
 	// Parse command
 	parts := strings.Split(command, " ")
@@ -586,7 +602,7 @@ func (t *TestContext) iShouldSee(expected string) error {
 
 func (t *TestContext) theConfigFileShouldContainServerURL(expectedURL string) error {
 	// Read config directly
-	viper.ReadInConfig()
+	_ = viper.ReadInConfig()
 	actualURL := viper.GetString("server_url")
 	if actualURL != expectedURL {
 		return fmt.Errorf("expected server URL '%s', but got '%s'", expectedURL, actualURL)
@@ -642,6 +658,29 @@ func (t *TestContext) anLXCContainerExists(id int) error {
 
 func (t *TestContext) anLXCContainerHasSnapshots(id int) error {
 	t.lxcId = id
+	return nil
+}
+
+func (t *TestContext) aNewContainerWithIDShouldBeCreated(id int) error {
+	if t.commandError != nil {
+		return fmt.Errorf("clone failed: %w", t.commandError)
+	}
+	if t.cloneOptions == nil {
+		return fmt.Errorf("clone was not invoked")
+	}
+	if t.cloneOptions.NewID != id {
+		return fmt.Errorf("clone target ID = %d, want %d", t.cloneOptions.NewID, id)
+	}
+	return nil
+}
+
+func (t *TestContext) theNewContainerShouldBeNamed(name string) error {
+	if t.cloneOptions == nil {
+		return fmt.Errorf("clone was not invoked")
+	}
+	if t.cloneOptions.Hostname != name {
+		return fmt.Errorf("clone hostname = %q, want %q", t.cloneOptions.Hostname, name)
+	}
 	return nil
 }
 

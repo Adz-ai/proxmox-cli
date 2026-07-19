@@ -439,6 +439,21 @@ func (mr *MockVirtualMachineInterfaceMockRecorder) Details() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Details", reflect.TypeOf((*MockVirtualMachineInterface)(nil).Details))
 }
 
+// NewSnapshot mocks base method.
+func (m *MockVirtualMachineInterface) NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewSnapshot", ctx, name)
+	ret0, _ := ret[0].(*proxmox.Task)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewSnapshot indicates an expected call of NewSnapshot.
+func (mr *MockVirtualMachineInterfaceMockRecorder) NewSnapshot(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewSnapshot", reflect.TypeOf((*MockVirtualMachineInterface)(nil).NewSnapshot), ctx, name)
+}
+
 // Reboot mocks base method.
 func (m *MockVirtualMachineInterface) Reboot(ctx context.Context) (*proxmox.Task, error) {
 	m.ctrl.T.Helper()
@@ -467,6 +482,21 @@ func (m *MockVirtualMachineInterface) Shutdown(ctx context.Context) (*proxmox.Ta
 func (mr *MockVirtualMachineInterfaceMockRecorder) Shutdown(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shutdown", reflect.TypeOf((*MockVirtualMachineInterface)(nil).Shutdown), ctx)
+}
+
+// Snapshots mocks base method.
+func (m *MockVirtualMachineInterface) Snapshots(ctx context.Context) ([]*proxmox.VirtualMachineSnapshot, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Snapshots", ctx)
+	ret0, _ := ret[0].([]*proxmox.VirtualMachineSnapshot)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Snapshots indicates an expected call of Snapshots.
+func (mr *MockVirtualMachineInterfaceMockRecorder) Snapshots(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Snapshots", reflect.TypeOf((*MockVirtualMachineInterface)(nil).Snapshots), ctx)
 }
 
 // Start mocks base method.

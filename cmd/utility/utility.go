@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
 
@@ -177,6 +180,14 @@ func (r *RealVirtualMachine) Clone(ctx context.Context, options *proxmox.Virtual
 	return r.vm.Clone(ctx, options)
 }
 
+func (r *RealVirtualMachine) Snapshots(ctx context.Context) ([]*proxmox.VirtualMachineSnapshot, error) {
+	return r.vm.Snapshots(ctx)
+}
+
+func (r *RealVirtualMachine) NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
+	return r.vm.NewSnapshot(ctx, name)
+}
+
 // Global variable for dependency injection (for testing)
 var (
 	clientFactory   func() interfaces.ProxmoxClientInterface
@@ -190,22 +201,42 @@ func CheckIfAuthPresent() error {
 		return errors.New("not configured; run 'proxmox-cli init'")
 	}
 
-	// Check if the client is authenticated
-	authTicket := viper.Sub("auth_ticket")
-	if authTicket == nil || authTicket.GetString("ticket") == "" || authTicket.GetString("CSRFPreventionToken") == "" {
-		return errors.New("not authenticated; run 'proxmox-cli auth login -u <username>'")
+	if HasAPIToken() || HasSessionTicket() {
+		return nil
 	}
-	return nil
+	return errors.New("not authenticated; run 'proxmox-cli auth login -u <username>' or 'proxmox-cli auth token -t <token-id>'")
 }
 
-// ClearAuthTicket blanks stored credentials in viper's state. Viper cannot
-// delete keys, and an empty replacement map does not shadow values already
-// loaded from the config file, so every existing subkey must be overwritten
-// individually for WriteConfig to persist the cleared state.
+// HasAPIToken reports whether an API token is stored in the configuration.
+func HasAPIToken() bool {
+	token := viper.Sub("api_token")
+	return token != nil && token.GetString("token_id") != "" && token.GetString("secret") != ""
+}
+
+// HasSessionTicket reports whether a session ticket is stored in the configuration.
+func HasSessionTicket() bool {
+	authTicket := viper.Sub("auth_ticket")
+	return authTicket != nil && authTicket.GetString("ticket") != "" && authTicket.GetString("CSRFPreventionToken") != ""
+}
+
+// ClearAuthTicket blanks stored session credentials in viper's state. Viper
+// cannot delete keys, and an empty replacement map does not shadow values
+// already loaded from the config file, so every existing subkey must be
+// overwritten individually for WriteConfig to persist the cleared state.
 func ClearAuthTicket() {
-	viper.Set("auth_ticket", map[string]any{})
+	clearCredentialSection("auth_ticket")
+}
+
+// ClearAPIToken blanks any stored API token; see ClearAuthTicket for the
+// viper key-shadowing details.
+func ClearAPIToken() {
+	clearCredentialSection("api_token")
+}
+
+func clearCredentialSection(section string) {
+	viper.Set(section, map[string]any{})
 	for _, key := range viper.AllKeys() {
-		if strings.HasPrefix(key, "auth_ticket.") {
+		if strings.HasPrefix(key, section+".") {
 			viper.Set(key, "")
 		}
 	}
@@ -222,7 +253,7 @@ func GetClient() (interfaces.ProxmoxClientInterface, error) {
 
 	endpoint := viper.GetString("server_url")
 	if endpoint == "" {
-		return nil, errors.New("Proxmox server URL is not configured")
+		return nil, errors.New("server URL is not configured")
 	}
 
 	normalizedEndpoint, err := NormalizeServerURL(endpoint)
@@ -235,16 +266,17 @@ func GetClient() (interfaces.ProxmoxClientInterface, error) {
 	}
 	apiEndpoint := normalizedEndpoint + "/api2/json"
 
-	authTicket := viper.Sub("auth_ticket")
 	var realClient *proxmox.Client
-	if authTicket != nil {
-		ticket := authTicket.GetString("ticket")
-		csrfToken := authTicket.GetString("CSRFPreventionToken")
-		if ticket != "" && csrfToken != "" {
-			realClient = proxmox.NewClient(apiEndpoint,
-				proxmox.WithHTTPClient(httpClient),
-				proxmox.WithSession(ticket, csrfToken))
-		}
+	if HasAPIToken() {
+		token := viper.Sub("api_token")
+		realClient = proxmox.NewClient(apiEndpoint,
+			proxmox.WithHTTPClient(httpClient),
+			proxmox.WithAPIToken(token.GetString("token_id"), token.GetString("secret")))
+	} else if HasSessionTicket() {
+		authTicket := viper.Sub("auth_ticket")
+		realClient = proxmox.NewClient(apiEndpoint,
+			proxmox.WithHTTPClient(httpClient),
+			proxmox.WithSession(authTicket.GetString("ticket"), authTicket.GetString("CSRFPreventionToken")))
 	}
 
 	if realClient == nil {
@@ -357,26 +389,28 @@ func LoadConfig() error {
 	return nil
 }
 
-// normalizeAuthTicket tidies the auth_ticket section before it is persisted:
-// entries blanked by ClearAuthTicket are dropped (removing the section
-// entirely once no credentials remain), and the CSRF token key viper
-// lowercases internally is restored to its documented casing.
-func normalizeAuthTicket(settings map[string]any) {
-	authTicket, ok := settings["auth_ticket"].(map[string]any)
-	if !ok {
-		return
-	}
-	for key, value := range authTicket {
-		if text, ok := value.(string); ok && text == "" {
-			delete(authTicket, key)
+// normalizeCredentials tidies the credential sections before they are
+// persisted: entries blanked by ClearAuthTicket/ClearAPIToken are dropped
+// (removing a section entirely once no credentials remain), and the CSRF
+// token key viper lowercases internally is restored to its documented casing.
+func normalizeCredentials(settings map[string]any) {
+	for _, section := range []string{"auth_ticket", "api_token"} {
+		credentials, ok := settings[section].(map[string]any)
+		if !ok {
+			continue
 		}
-	}
-	if value, ok := authTicket["csrfpreventiontoken"]; ok {
-		delete(authTicket, "csrfpreventiontoken")
-		authTicket["CSRFPreventionToken"] = value
-	}
-	if len(authTicket) == 0 {
-		delete(settings, "auth_ticket")
+		for key, value := range credentials {
+			if text, ok := value.(string); ok && text == "" {
+				delete(credentials, key)
+			}
+		}
+		if value, ok := credentials["csrfpreventiontoken"]; ok {
+			delete(credentials, "csrfpreventiontoken")
+			credentials["CSRFPreventionToken"] = value
+		}
+		if len(credentials) == 0 {
+			delete(settings, section)
+		}
 	}
 }
 
@@ -389,7 +423,7 @@ func WriteConfig() error {
 		return fmt.Errorf("create configuration directory: %w", err)
 	}
 	settings := viper.AllSettings()
-	normalizeAuthTicket(settings)
+	normalizeCredentials(settings)
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode configuration: %w", err)
@@ -400,17 +434,17 @@ func WriteConfig() error {
 		return fmt.Errorf("create temporary configuration: %w", err)
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
+	defer func() { _ = os.Remove(temporaryPath) }()
 	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("secure temporary configuration: %w", err)
 	}
 	if _, err := temporary.Write(data); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("write configuration: %w", err)
 	}
 	if err := temporary.Sync(); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("sync configuration: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
@@ -426,9 +460,52 @@ func WriteConfig() error {
 	return nil
 }
 
+// AddOutputFlag registers the shared --output flag on a read command.
+func AddOutputFlag(cmd *cobra.Command) {
+	cmd.Flags().StringP("output", "o", "table", "Output format: table or json")
+}
+
+// OutputFormat validates and returns the shared --output flag.
+func OutputFormat(cmd *cobra.Command) (string, error) {
+	format, err := cmd.Flags().GetString("output")
+	if err != nil {
+		return "", fmt.Errorf("read output flag: %w", err)
+	}
+	switch format {
+	case "table", "json":
+		return format, nil
+	default:
+		return "", fmt.Errorf("unsupported output format %q; use table or json", format)
+	}
+}
+
+// PrintJSON writes v to out as indented JSON.
+func PrintJSON(out io.Writer, v any) error {
+	encoder := json.NewEncoder(out)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(v); err != nil {
+		return fmt.Errorf("encode JSON output: %w", err)
+	}
+	return nil
+}
+
+// DefaultTaskTimeout bounds how long commands wait for a Proxmox task when
+// the user does not override it with --timeout.
+const DefaultTaskTimeout = 10 * time.Minute
+
+// TaskTimeout returns the value of the root --timeout flag, falling back to
+// the default when the flag is missing or not positive.
+func TaskTimeout(cmd *cobra.Command) time.Duration {
+	timeout, err := cmd.Flags().GetDuration("timeout")
+	if err != nil || timeout <= 0 {
+		return DefaultTaskTimeout
+	}
+	return timeout
+}
+
 func WaitForTask(ctx context.Context, task *proxmox.Task, timeout time.Duration) error {
 	if task == nil {
-		return errors.New("Proxmox returned no task")
+		return errors.New("no task returned by Proxmox")
 	}
 	if !task.IsSuccessful && !task.IsFailed {
 		seconds := int(math.Ceil(timeout.Seconds()))

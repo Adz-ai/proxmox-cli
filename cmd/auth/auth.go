@@ -12,6 +12,6 @@ func NewCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 	}
 
-	cmd.AddCommand(newLoginCmd(), newLogoutCmd())
+	cmd.AddCommand(newLoginCmd(), newLogoutCmd(), newTokenCmd())
 	return cmd
 }

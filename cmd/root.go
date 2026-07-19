@@ -33,6 +33,8 @@ Get started:
 		},
 	}
 
+	cmd.PersistentFlags().Duration("timeout", utility.DefaultTaskTimeout, "Maximum time to wait for a Proxmox task to complete")
+
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newStatusCmd())
 	cmd.AddCommand(nodes.NewCmd())

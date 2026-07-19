@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
+	"github.com/Adz-ai/proxmox-cli/internal/interfaces"
 	"github.com/spf13/cobra"
 )
 
@@ -17,6 +18,10 @@ func newDescribeCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			ctx := cmd.Context()
 			nodeName, vmid, err := containerTargetFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+			format, err := utility.OutputFormat(cmd)
 			if err != nil {
 				return err
 			}
@@ -37,6 +42,13 @@ func newDescribeCmd() *cobra.Command {
 			}
 			details := container.Details()
 
+			if format == "json" {
+				return utility.PrintJSON(out, struct {
+					VMID int `json:"vmid"`
+					interfaces.ContainerDetails
+				}{vmid, details})
+			}
+
 			fmt.Fprintln(out, "Container Details")
 			fmt.Fprintln(out, "=================")
 			fmt.Fprintf(out, "ID: %d\n", vmid)
@@ -56,6 +68,7 @@ func newDescribeCmd() *cobra.Command {
 	}
 
 	addContainerTargetFlags(cmd)
+	utility.AddOutputFlag(cmd)
 	return cmd
 }
 

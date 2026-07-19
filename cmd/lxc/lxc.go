@@ -23,6 +23,7 @@ func NewCmd() *cobra.Command {
 		newStopCmd(),
 		newRestartCmd(),
 		newDeleteCmd(),
+		newCloneCmd(),
 		newSnapshotCmd(),
 	)
 	return cmd

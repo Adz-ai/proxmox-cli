@@ -33,7 +33,7 @@ func newDeleteCmd() *cobra.Command {
 				return fmt.Errorf("validate id: id must be positive")
 			}
 
-			if err := deleteVM(cmd.Context(), node, id); err != nil {
+			if err := deleteVM(cmd.Context(), node, id, utility.TaskTimeout(cmd)); err != nil {
 				return fmt.Errorf("delete VM %d from node %q: %w", id, node, err)
 			}
 
@@ -54,7 +54,7 @@ func newDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func deleteVM(ctx context.Context, node string, id int) error {
+func deleteVM(ctx context.Context, node string, id int, timeout time.Duration) error {
 	client, err := utility.AuthenticatedClient()
 	if err != nil {
 		return fmt.Errorf("authenticate Proxmox client: %w", err)
@@ -74,7 +74,7 @@ func deleteVM(ctx context.Context, node string, id int) error {
 	if err != nil {
 		return fmt.Errorf("start delete task: %w", err)
 	}
-	if err := utility.WaitForTask(ctx, task, 10*time.Minute); err != nil {
+	if err := utility.WaitForTask(ctx, task, timeout); err != nil {
 		return fmt.Errorf("wait for delete task: %w", err)
 	}
 

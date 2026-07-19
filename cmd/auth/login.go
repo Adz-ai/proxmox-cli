@@ -28,7 +28,7 @@ func newLoginCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read username: %w", err)
 			}
-			password, err := getPassword(cmd)
+			password, err := promptSecret(cmd, "Enter Password: ")
 			if err != nil {
 				return err
 			}
@@ -47,26 +47,28 @@ func newLoginCmd() *cobra.Command {
 	return cmd
 }
 
-func getPassword(cmd *cobra.Command) (string, error) {
+// promptSecret reads a secret without echoing when stdin is a terminal, and
+// falls back to a plain read for piped input.
+func promptSecret(cmd *cobra.Command, prompt string) (string, error) {
 	out := cmd.OutOrStdout()
 	in := cmd.InOrStdin()
 
 	if file, ok := in.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
-		fmt.Fprint(out, "Enter Password: ")
-		bytePassword, err := term.ReadPassword(int(file.Fd()))
+		fmt.Fprint(out, prompt)
+		byteSecret, err := term.ReadPassword(int(file.Fd()))
 		if err != nil {
-			return "", fmt.Errorf("read password: %w", err)
+			return "", fmt.Errorf("read secret: %w", err)
 		}
 		fmt.Fprintln(out)
-		return strings.TrimSpace(string(bytePassword)), nil
+		return strings.TrimSpace(string(byteSecret)), nil
 	}
 
 	reader := bufio.NewReader(in)
-	password, err := reader.ReadString('\n')
+	secret, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
-		return "", fmt.Errorf("read password: %w", err)
+		return "", fmt.Errorf("read secret: %w", err)
 	}
-	return strings.TrimSpace(password), nil
+	return strings.TrimSpace(secret), nil
 }
 
 func authenticateWithProxmox(cmd *cobra.Command, username, password string) error {
@@ -131,7 +133,9 @@ func authenticateWithProxmox(cmd *cobra.Command, username, password string) erro
 
 	// Store only the credentials the CLI needs; the session also carries
 	// username, capabilities, and cluster name that don't belong in the config.
+	// Any stored API token is cleared so the fresh login takes effect.
 	utility.ClearAuthTicket()
+	utility.ClearAPIToken()
 	viper.Set("auth_ticket.ticket", ticket.Ticket)
 	viper.Set("auth_ticket.CSRFPreventionToken", ticket.CSRFPreventionToken)
 	if err := utility.WriteConfig(); err != nil {

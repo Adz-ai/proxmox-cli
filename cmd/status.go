@@ -39,14 +39,16 @@ func newStatusCmd() *cobra.Command {
 			fmt.Fprintf(out, "\nServer URL: %s\n", serverURL)
 
 			// Check authentication
-			authTicket := viper.Sub("auth_ticket")
-			if authTicket == nil || authTicket.GetString("ticket") == "" {
+			switch {
+			case utility.HasAPIToken():
+				fmt.Fprintln(out, "Authentication: Logged in (API token)")
+			case utility.HasSessionTicket():
+				fmt.Fprintln(out, "Authentication: Logged in (session ticket)")
+			default:
 				fmt.Fprintln(out, "Authentication: Not logged in")
 				fmt.Fprintln(out, "Run 'proxmox-cli auth login -u <username>' to authenticate")
 				return nil
 			}
-
-			fmt.Fprintln(out, "Authentication: Logged in")
 
 			// Test connection
 			verbose, err := cmd.Flags().GetBool("verbose")

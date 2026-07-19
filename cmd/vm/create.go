@@ -56,7 +56,7 @@ func newCreateVMCmd() *cobra.Command {
 				return fmt.Errorf("map VM spec to options: %w", err)
 			}
 
-			if err := createVirtualMachine(cmd.Context(), node, id, vmOptions); err != nil {
+			if err := createVirtualMachine(cmd.Context(), node, id, vmOptions, utility.TaskTimeout(cmd)); err != nil {
 				return fmt.Errorf("create virtual machine %d on node %q: %w", id, node, err)
 			}
 
@@ -124,7 +124,7 @@ func mapToVMOptions(spec map[string]interface{}) ([]proxmox.VirtualMachineOption
 	return options, nil
 }
 
-func createVirtualMachine(ctx context.Context, node string, vmID int, options []proxmox.VirtualMachineOption) error {
+func createVirtualMachine(ctx context.Context, node string, vmID int, options []proxmox.VirtualMachineOption, timeout time.Duration) error {
 	client, err := utility.AuthenticatedClient()
 	if err != nil {
 		return fmt.Errorf("authenticate Proxmox client: %w", err)
@@ -139,7 +139,7 @@ func createVirtualMachine(ctx context.Context, node string, vmID int, options []
 	if err != nil {
 		return fmt.Errorf("start create task: %w", err)
 	}
-	if err := utility.WaitForTask(ctx, task, 10*time.Minute); err != nil {
+	if err := utility.WaitForTask(ctx, task, timeout); err != nil {
 		return fmt.Errorf("wait for create task: %w", err)
 	}
 

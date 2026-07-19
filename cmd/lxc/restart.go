@@ -2,7 +2,6 @@ package lxc
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 	"github.com/spf13/cobra"
@@ -41,7 +40,7 @@ func newRestartCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("restart container %d: %w", vmid, err)
 			}
-			if err := utility.WaitForTask(ctx, task, 10*time.Minute); err != nil {
+			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
 				return fmt.Errorf("restart container %d: %w", vmid, err)
 			}
 

@@ -1,4 +1,4 @@
-package lxc
+package vm
 
 import (
 	"fmt"
@@ -13,8 +13,8 @@ import (
 func newSnapshotCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "snapshot",
-		Short: "Manage LXC container snapshots",
-		Long:  `Create and list snapshots of LXC containers.`,
+		Short: "Manage virtual machine snapshots",
+		Long:  `Create and list snapshots of virtual machines.`,
 		Args:  cobra.NoArgs,
 	}
 
@@ -25,7 +25,7 @@ func newSnapshotCmd() *cobra.Command {
 func newSnapshotCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a snapshot of an LXC container",
+		Short: "Create a snapshot of a virtual machine",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
@@ -39,25 +39,25 @@ func newSnapshotCreateCmd() *cobra.Command {
 				return fmt.Errorf("snapshot name cannot be empty")
 			}
 
-			container, vmid, err := containerFromFlags(cmd)
+			vm, id, err := vmFromFlags(cmd)
 			if err != nil {
 				return err
 			}
 
-			task, err := container.NewSnapshot(ctx, name)
+			task, err := vm.NewSnapshot(ctx, name)
 			if err != nil {
-				return fmt.Errorf("create snapshot %q for container %d: %w", name, vmid, err)
+				return fmt.Errorf("create snapshot %q for VM %d: %w", name, id, err)
 			}
 			if err := utility.WaitForTask(ctx, task, utility.TaskTimeout(cmd)); err != nil {
-				return fmt.Errorf("create snapshot %q for container %d: %w", name, vmid, err)
+				return fmt.Errorf("create snapshot %q for VM %d: %w", name, id, err)
 			}
 
-			fmt.Fprintf(out, "Snapshot %q created successfully for container %d\n", name, vmid)
+			fmt.Fprintf(out, "Snapshot %q created successfully for VM %d\n", name, id)
 			return nil
 		},
 	}
 
-	addContainerTargetFlags(cmd)
+	addVMTargetFlags(cmd)
 	cmd.Flags().String("name", "", "Snapshot name")
 	if err := cmd.MarkFlagRequired("name"); err != nil {
 		panic(err)
@@ -65,7 +65,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 	return cmd
 }
 
-type snapshotSummary struct {
+type vmSnapshotSummary struct {
 	Name        string `json:"name"`
 	CreatedAt   string `json:"created_at,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -74,7 +74,7 @@ type snapshotSummary struct {
 func newSnapshotListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List snapshots of an LXC container",
+		Short: "List snapshots of a virtual machine",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
@@ -84,27 +84,27 @@ func newSnapshotListCmd() *cobra.Command {
 				return err
 			}
 
-			container, vmid, err := containerFromFlags(cmd)
+			vm, id, err := vmFromFlags(cmd)
 			if err != nil {
 				return err
 			}
 
-			snapshots, err := container.Snapshots(ctx)
+			snapshots, err := vm.Snapshots(ctx)
 			if err != nil {
-				return fmt.Errorf("list snapshots for container %d: %w", vmid, err)
+				return fmt.Errorf("list snapshots for VM %d: %w", id, err)
 			}
 
-			summaries := []snapshotSummary{}
+			summaries := []vmSnapshotSummary{}
 			for _, snapshot := range snapshots {
 				// The API reports the live state as the pseudo-snapshot "current".
 				if snapshot.Name == "current" {
 					continue
 				}
 				created := ""
-				if snapshot.SnapshotCreationTime > 0 {
-					created = time.Unix(snapshot.SnapshotCreationTime, 0).UTC().Format(time.RFC3339)
+				if snapshot.Snaptime > 0 {
+					created = time.Unix(snapshot.Snaptime, 0).UTC().Format(time.RFC3339)
 				}
-				summaries = append(summaries, snapshotSummary{
+				summaries = append(summaries, vmSnapshotSummary{
 					Name:        snapshot.Name,
 					CreatedAt:   created,
 					Description: snapshot.Description,
@@ -115,8 +115,8 @@ func newSnapshotListCmd() *cobra.Command {
 				return utility.PrintJSON(out, summaries)
 			}
 
-			fmt.Fprintf(out, "Snapshots for container %d:\n", vmid)
-			fmt.Fprintln(out, "===========================")
+			fmt.Fprintf(out, "Snapshots for VM %d:\n", id)
+			fmt.Fprintln(out, "====================")
 			for _, summary := range summaries {
 				created := summary.CreatedAt
 				if created == "" {
@@ -131,15 +131,15 @@ func newSnapshotListCmd() *cobra.Command {
 		},
 	}
 
-	addContainerTargetFlags(cmd)
+	addVMTargetFlags(cmd)
 	utility.AddOutputFlag(cmd)
 	return cmd
 }
 
-// containerFromFlags resolves the node/vmid flags to a container after
+// vmFromFlags resolves the node/id flags to a virtual machine after
 // authenticating, shared by the snapshot subcommands.
-func containerFromFlags(cmd *cobra.Command) (interfaces.ContainerInterface, int, error) {
-	nodeName, vmid, err := containerTargetFromFlags(cmd)
+func vmFromFlags(cmd *cobra.Command) (interfaces.VirtualMachineInterface, int, error) {
+	node, id, err := vmTargetFromFlags(cmd)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -149,14 +149,14 @@ func containerFromFlags(cmd *cobra.Command) (interfaces.ContainerInterface, int,
 		return nil, 0, fmt.Errorf("authenticate Proxmox client: %w", err)
 	}
 
-	node, err := client.Node(cmd.Context(), nodeName)
+	retrievedNode, err := client.Node(cmd.Context(), node)
 	if err != nil {
-		return nil, 0, fmt.Errorf("get node %q: %w", nodeName, err)
+		return nil, 0, fmt.Errorf("get node %q: %w", node, err)
 	}
 
-	container, err := node.Container(cmd.Context(), vmid)
+	vm, err := retrievedNode.VirtualMachine(cmd.Context(), id)
 	if err != nil {
-		return nil, 0, fmt.Errorf("get container %d: %w", vmid, err)
+		return nil, 0, fmt.Errorf("get VM %d: %w", id, err)
 	}
-	return container, vmid, nil
+	return vm, id, nil
 }

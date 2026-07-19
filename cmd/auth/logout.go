@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 )
@@ -18,14 +17,13 @@ func newLogoutCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 
-			authTicket := viper.Sub("auth_ticket")
-			wasAuthenticated := authTicket != nil && authTicket.GetString("ticket") != ""
-			if !wasAuthenticated {
+			if !utility.HasSessionTicket() && !utility.HasAPIToken() {
 				fmt.Fprintln(out, "Not currently logged in")
 				return nil
 			}
 
 			utility.ClearAuthTicket()
+			utility.ClearAPIToken()
 			if err := utility.WriteConfig(); err != nil {
 				return fmt.Errorf("clear authentication: %w", err)
 			}

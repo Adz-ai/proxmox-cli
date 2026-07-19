@@ -84,6 +84,7 @@ It will prompt you for the server URL and save it to the configuration file.`,
 
 			if existingURL != "" && (existingURL != serverURL || existingInsecure != insecure || existingCACert != caCert) {
 				utility.ClearAuthTicket()
+				utility.ClearAPIToken()
 				fmt.Fprintln(out, "Cleared existing authentication (connection settings changed)")
 			}
 

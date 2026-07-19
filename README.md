@@ -4,7 +4,8 @@ A powerful command-line interface for managing Proxmox Virtual Environment (PVE)
 
 ## Features
 
-- **Secure Authentication**: Verified TLS by default with private session storage
+- **Secure Authentication**: Password or API token auth with verified TLS by default
+- **Scriptable**: JSON output (`-o json`) on all read commands
 - **Virtual Machine Management**: Create, list, describe, start, stop, restart, and delete VMs
 - **LXC Container Support**: Full container lifecycle plus snapshot create and list
 - **Node Operations**: Monitor and manage cluster nodes
@@ -64,11 +65,24 @@ proxmox-cli lxc get
 ```bash
 proxmox-cli init                    # Configure server connection (interactive)
 proxmox-cli init --force            # Reconfigure existing setup
-proxmox-cli auth login -u <user>    # Authenticate with Proxmox
-proxmox-cli auth logout             # Clear authentication tokens
+proxmox-cli auth login -u <user>    # Authenticate with username and password
+proxmox-cli auth token -t 'user@realm!tokenname'  # Authenticate with an API token
+proxmox-cli auth logout             # Clear stored credentials
 proxmox-cli status                  # Check configuration and connection
 proxmox-cli status --verbose        # Detailed status with server info
 proxmox-cli --version               # Show build version
+```
+
+Password logins use Proxmox session tickets, which expire after about two
+hours. For scripts and long-lived setups, use an API token instead: create one
+in the Proxmox web interface under Datacenter > Permissions > API Tokens, then
+run `proxmox-cli auth token -t 'user@realm!tokenname'` and paste the secret
+when prompted. Tokens do not expire and take precedence over a stored ticket.
+
+### Global Flags
+```bash
+-o, --output table|json   # Structured output on get/describe/list commands
+    --timeout <duration>  # Maximum time to wait for Proxmox tasks (default 10m)
 ```
 
 ### Virtual Machine Management
@@ -83,6 +97,10 @@ proxmox-cli vm start -n <node> -i <vmid>     # Start a VM
 proxmox-cli vm stop -n <node> -i <vmid>      # Stop a VM
 proxmox-cli vm restart -n <node> -i <vmid>   # Restart a VM
 proxmox-cli vm delete -n <node> -i <vmid>    # Delete a VM
+
+# Snapshots
+proxmox-cli vm snapshot create -n <node> -i <vmid> --name <snapshot>
+proxmox-cli vm snapshot list -n <node> -i <vmid>
 ```
 
 ### LXC Container Management
@@ -99,11 +117,9 @@ proxmox-cli lxc restart -n <node> -i <ctid>   # Restart a container
 proxmox-cli lxc delete -n <node> -i <ctid>    # Delete a container
 proxmox-cli lxc delete -n <node> -i <ctid> --force --purge # Force deletion, removing related configuration
 
-# Snapshots
+# Snapshots and cloning
 proxmox-cli lxc snapshot create -n <node> -i <ctid> --name <snapshot>
 proxmox-cli lxc snapshot list -n <node> -i <ctid>
-
-# Advanced operations (coming soon)
 proxmox-cli lxc clone -n <node> -s <source> -t <target> --name <name>
 ```
 
@@ -133,9 +149,16 @@ TLS certificates are verified by default. For a private CA, configure its PEM fi
   "auth_ticket": {
     "ticket": "PVE:user@realm:...",
     "CSRFPreventionToken": "..."
+  },
+  "api_token": {
+    "token_id": "user@realm!tokenname",
+    "secret": "..."
   }
 }
 ```
+
+Only one of `auth_ticket` or `api_token` is normally present; `api_token`
+wins when both are stored.
 
 ### Manual Configuration
 ```bash
@@ -240,18 +263,18 @@ proxmox-cli/
 ## Status & Roadmap
 
 ### Implemented Features
-- Authentication and session management
+- Session and API token authentication
 - Node listing and detailed information
 - VM operations (list, describe, create, start, stop, restart, delete)
-- LXC operations (list, describe, create, start, stop, restart, delete)
-- LXC snapshots (create, list)
+- LXC operations (list, describe, create, start, stop, restart, delete, clone)
+- VM and LXC snapshots (create, list)
+- JSON output for read commands and configurable task timeouts
 - Nonzero exit statuses for operational failures
 - TLS verification, custom CA support, and private config files
 
 ### In Development
-- VM and LXC clone operations
+- VM clone operations
 - Node storage and task management
-- VM snapshots
 
 ### Planned Features
 - Template management

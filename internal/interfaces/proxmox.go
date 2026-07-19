@@ -39,15 +39,15 @@ type ContainerInterface interface {
 }
 
 type ContainerDetails struct {
-	Name      string
-	Node      string
-	Status    string
-	Tags      string
-	CPUs      int
-	MaxMemory uint64
-	MaxSwap   uint64
-	MaxDisk   uint64
-	Uptime    uint64
+	Name      string `json:"name"`
+	Node      string `json:"node"`
+	Status    string `json:"status"`
+	Tags      string `json:"tags,omitempty"`
+	CPUs      int    `json:"cpus"`
+	MaxMemory uint64 `json:"max_memory_bytes"`
+	MaxSwap   uint64 `json:"max_swap_bytes"`
+	MaxDisk   uint64 `json:"max_disk_bytes"`
+	Uptime    uint64 `json:"uptime_seconds"`
 }
 
 // VirtualMachineInterface defines the interface for VM operations
@@ -59,18 +59,20 @@ type VirtualMachineInterface interface {
 	Reboot(ctx context.Context) (*proxmox.Task, error)
 	Delete(ctx context.Context, options *proxmox.VirtualMachineDeleteOptions) (*proxmox.Task, error)
 	Clone(ctx context.Context, options *proxmox.VirtualMachineCloneOptions) (int, *proxmox.Task, error)
+	Snapshots(ctx context.Context) ([]*proxmox.VirtualMachineSnapshot, error)
+	NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
 }
 
 type VirtualMachineDetails struct {
-	Name      string
-	Node      string
-	Status    string
-	Tags      string
-	CPUs      int
-	CPU       float64
-	Memory    uint64
-	MaxMemory uint64
-	Disk      uint64
-	MaxDisk   uint64
-	Uptime    uint64
+	Name      string  `json:"name"`
+	Node      string  `json:"node"`
+	Status    string  `json:"status"`
+	Tags      string  `json:"tags,omitempty"`
+	CPUs      int     `json:"cpus"`
+	CPU       float64 `json:"cpu_usage"`
+	Memory    uint64  `json:"memory_bytes"`
+	MaxMemory uint64  `json:"max_memory_bytes"`
+	Disk      uint64  `json:"disk_bytes"`
+	MaxDisk   uint64  `json:"max_disk_bytes"`
+	Uptime    uint64  `json:"uptime_seconds"`
 }

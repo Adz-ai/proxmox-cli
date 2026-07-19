@@ -9,6 +9,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type nodeDetails struct {
+	Name      string  `json:"name"`
+	Status    string  `json:"status"`
+	Type      string  `json:"type"`
+	Uptime    uint64  `json:"uptime_seconds"`
+	CPUUsage  float64 `json:"cpu_usage"`
+	CPUCores  int     `json:"cpu_cores"`
+	Memory    uint64  `json:"memory_bytes"`
+	MaxMemory uint64  `json:"max_memory_bytes"`
+	Disk      uint64  `json:"disk_bytes"`
+	MaxDisk   uint64  `json:"max_disk_bytes"`
+}
+
 func newDescribeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "describe",
@@ -24,6 +37,10 @@ func newDescribeCmd() *cobra.Command {
 			nodeName = strings.TrimSpace(nodeName)
 			if nodeName == "" {
 				return fmt.Errorf("validate node name: name cannot be empty")
+			}
+			format, err := utility.OutputFormat(cmd)
+			if err != nil {
+				return err
 			}
 
 			client, err := utility.AuthenticatedClient()
@@ -55,6 +72,21 @@ func newDescribeCmd() *cobra.Command {
 
 			if nodeStatus == nil {
 				return fmt.Errorf("node %q not found in cluster", nodeName)
+			}
+
+			if format == "json" {
+				return utility.PrintJSON(out, nodeDetails{
+					Name:      nodeStatus.Node,
+					Status:    nodeStatus.Status,
+					Type:      nodeStatus.Type,
+					Uptime:    nodeStatus.Uptime,
+					CPUUsage:  nodeStatus.CPU,
+					CPUCores:  nodeStatus.MaxCPU,
+					Memory:    nodeStatus.Mem,
+					MaxMemory: nodeStatus.MaxMem,
+					Disk:      nodeStatus.Disk,
+					MaxDisk:   nodeStatus.MaxDisk,
+				})
 			}
 
 			// Display node information
@@ -100,6 +132,7 @@ func newDescribeCmd() *cobra.Command {
 	if err := cmd.MarkFlagRequired("name"); err != nil {
 		panic(err)
 	}
+	utility.AddOutputFlag(cmd)
 
 	return cmd
 }

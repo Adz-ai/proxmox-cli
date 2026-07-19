@@ -40,7 +40,7 @@ It will prompt you for the server URL and save it to the configuration file.`,
 			// Check if already configured
 			existingURL := viper.GetString("server_url")
 			if existingURL != "" && !force {
-				fmt.Fprintf(out, "⚠️  Already configured for server: %s\n", existingURL)
+				fmt.Fprintf(out, "Already configured for server: %s\n", existingURL)
 				fmt.Fprintln(out, "Use --force to reconfigure")
 				return nil
 			}
@@ -59,8 +59,8 @@ It will prompt you for the server URL and save it to the configuration file.`,
 			reader := bufio.NewReader(in)
 
 			fmt.Fprintln(out, "Welcome to Proxmox CLI")
-			fmt.Fprintln(out, "🚀 Proxmox CLI Configuration")
-			fmt.Fprintln(out, "============================")
+			fmt.Fprintln(out, "Proxmox CLI Configuration")
+			fmt.Fprintln(out, "=========================")
 
 			if existingURL != "" {
 				fmt.Fprintf(out, "Current server: %s\n\n", existingURL)
@@ -83,8 +83,8 @@ It will prompt you for the server URL and save it to the configuration file.`,
 			viper.Set("ca_cert", caCert)
 
 			if existingURL != "" && (existingURL != serverURL || existingInsecure != insecure || existingCACert != caCert) {
-				viper.Set("auth_ticket", map[string]any{})
-				fmt.Fprintln(out, "🔄 Cleared existing authentication (connection settings changed)")
+				utility.ClearAuthTicket()
+				fmt.Fprintln(out, "Cleared existing authentication (connection settings changed)")
 			}
 
 			if err := utility.WriteConfig(); err != nil {
@@ -95,9 +95,9 @@ It will prompt you for the server URL and save it to the configuration file.`,
 				return err
 			}
 
-			fmt.Fprintf(out, "\n✅ Configuration saved to %s\n", configPath)
-			fmt.Fprintf(out, "📡 Server URL: %s\n", serverURL)
-			fmt.Fprintln(out, "\n📌 Next step: Run 'proxmox-cli auth login -u <username>' to authenticate")
+			fmt.Fprintf(out, "\nConfiguration saved to %s\n", configPath)
+			fmt.Fprintf(out, "Server URL: %s\n", serverURL)
+			fmt.Fprintln(out, "\nNext step: Run 'proxmox-cli auth login -u <username>' to authenticate")
 			return nil
 		},
 	}

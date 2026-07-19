@@ -21,18 +21,18 @@ func newLogoutCmd() *cobra.Command {
 			authTicket := viper.Sub("auth_ticket")
 			wasAuthenticated := authTicket != nil && authTicket.GetString("ticket") != ""
 
-			viper.Set("auth_ticket", map[string]any{})
+			utility.ClearAuthTicket()
 			if err := utility.WriteConfig(); err != nil {
 				return fmt.Errorf("clear authentication: %w", err)
 			}
 
 			if !wasAuthenticated {
-				fmt.Fprintln(out, "ℹ️  Not currently logged in")
+				fmt.Fprintln(out, "Not currently logged in")
 				return nil
 			}
 
-			fmt.Fprintln(out, "✅ Logged out successfully")
-			fmt.Fprintln(out, "👋 Your authentication has been cleared")
+			fmt.Fprintln(out, "Logged out successfully")
+			fmt.Fprintln(out, "Your authentication has been cleared")
 			return nil
 		},
 	}

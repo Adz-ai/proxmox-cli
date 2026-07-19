@@ -180,6 +180,19 @@ func CheckIfAuthPresent() error {
 	return nil
 }
 
+// ClearAuthTicket blanks stored credentials in viper's state. Viper cannot
+// delete keys, and an empty replacement map does not shadow values already
+// loaded from the config file, so every existing subkey must be overwritten
+// individually for WriteConfig to persist the cleared state.
+func ClearAuthTicket() {
+	viper.Set("auth_ticket", map[string]any{})
+	for _, key := range viper.AllKeys() {
+		if strings.HasPrefix(key, "auth_ticket.") {
+			viper.Set(key, "")
+		}
+	}
+}
+
 // GetClient returns a Proxmox client (real or mock depending on test context)
 func GetClient() (interfaces.ProxmoxClientInterface, error) {
 	clientFactoryMu.RLock()

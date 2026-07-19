@@ -94,6 +94,69 @@ func TestInitPreservesTLSSettingsUnlessChanged(t *testing.T) {
 	}
 }
 
+func seedAuthenticatedConfig(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("PROXMOX_CLI_CONFIG", path)
+	viper.Set("server_url", "https://pve.example.com:8006")
+	viper.Set("auth_ticket.ticket", "PVE:root@pam:secret-ticket")
+	viper.Set("auth_ticket.CSRFPreventionToken", "secret-token")
+	if err := utility.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func assertCredentialsCleared(t *testing.T, path string) {
+	t.Helper()
+	// Reload from disk with fresh viper state, as a new CLI invocation would.
+	viper.Reset()
+	if err := utility.LoadConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := utility.CheckIfAuthPresent(); err == nil {
+		t.Fatal("credentials still usable after they should have been cleared")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "secret-ticket") || strings.Contains(string(data), "secret-token") {
+		t.Fatalf("credentials persisted in config file:\n%s", data)
+	}
+}
+
+func TestLogoutClearsPersistedCredentials(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	path := seedAuthenticatedConfig(t)
+
+	viper.Reset()
+	root := NewRootCmd()
+	root.SetArgs([]string{"auth", "logout"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCredentialsCleared(t, path)
+}
+
+func TestInitForceClearsPersistedCredentials(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	path := seedAuthenticatedConfig(t)
+
+	viper.Reset()
+	root := NewRootCmd()
+	root.SetIn(strings.NewReader("https://other.example.com:8006\n"))
+	root.SetArgs([]string{"init", "--force"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCredentialsCleared(t, path)
+}
+
 func TestCommandContextIsPropagated(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)

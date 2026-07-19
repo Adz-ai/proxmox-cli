@@ -5,8 +5,8 @@ A powerful command-line interface for managing Proxmox Virtual Environment (PVE)
 ## Features
 
 - **Secure Authentication**: Verified TLS by default with private session storage
-- **Virtual Machine Management**: Create, delete, list, and describe VMs
-- **LXC Container Support**: Create, list, start, stop, and delete containers
+- **Virtual Machine Management**: Create, list, describe, start, stop, restart, and delete VMs
+- **LXC Container Support**: Full container lifecycle plus snapshot create and list
 - **Node Operations**: Monitor and manage cluster nodes
 - **User-Friendly**: Clear error messages, helpful prompts, and guided setup
 - **Fast & Efficient**: Direct API communication with Proxmox VE
@@ -79,25 +79,32 @@ proxmox-cli vm describe -n <node> -i <vmid>  # Show detailed VM information
 
 # VM lifecycle
 proxmox-cli vm create -n <node> -i <vmid> -s <spec.yaml>  # Create VM from YAML
+proxmox-cli vm start -n <node> -i <vmid>     # Start a VM
+proxmox-cli vm stop -n <node> -i <vmid>      # Stop a VM
+proxmox-cli vm restart -n <node> -i <vmid>   # Restart a VM
 proxmox-cli vm delete -n <node> -i <vmid>    # Delete a VM
 ```
 
 ### LXC Container Management
 ```bash
-# List containers
+# List and inspect containers
 proxmox-cli lxc get                 # List all containers across all nodes
+proxmox-cli lxc describe -n <node> -i <ctid>  # Show container details
 
 # Container lifecycle
 proxmox-cli lxc create -n <node> -i <ctid> -s <spec.yaml>  # Create from YAML
 proxmox-cli lxc start -n <node> -i <ctid>     # Start a container
 proxmox-cli lxc stop -n <node> -i <ctid>      # Stop a container
+proxmox-cli lxc restart -n <node> -i <ctid>   # Restart a container
 proxmox-cli lxc delete -n <node> -i <ctid>    # Delete a container
-proxmox-cli lxc delete -n <node> -i <ctid> --force # Force deletion
+proxmox-cli lxc delete -n <node> -i <ctid> --force --purge # Force deletion, removing related configuration
+
+# Snapshots
+proxmox-cli lxc snapshot create -n <node> -i <ctid> --name <snapshot>
+proxmox-cli lxc snapshot list -n <node> -i <ctid>
 
 # Advanced operations (coming soon)
 proxmox-cli lxc clone -n <node> -s <source> -t <target> --name <name>
-proxmox-cli lxc snapshot create -n <node> -i <ctid> --name <snapshot>
-proxmox-cli lxc snapshot list -n <node> -i <ctid>
 ```
 
 ### Node Management
@@ -235,15 +242,16 @@ proxmox-cli/
 ### Implemented Features
 - Authentication and session management
 - Node listing and detailed information
-- VM operations (list, describe, create, delete)
-- LXC operations (list, create, start, stop, delete)
+- VM operations (list, describe, create, start, stop, restart, delete)
+- LXC operations (list, describe, create, start, stop, restart, delete)
+- LXC snapshots (create, list)
 - Nonzero exit statuses for operational failures
 - TLS verification, custom CA support, and private config files
 
 ### In Development
-- LXC advanced operations (clone, snapshots)
+- VM and LXC clone operations
 - Node storage and task management
-- VM advanced operations (start, stop, snapshots)
+- VM snapshots
 
 ### Planned Features
 - Template management

@@ -34,6 +34,10 @@ func newDeleteCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read force flag: %w", err)
 			}
+			purge, err := cmd.Flags().GetBool("purge")
+			if err != nil {
+				return fmt.Errorf("read purge flag: %w", err)
+			}
 			if err := validateContainerTarget(nodeName, vmid); err != nil {
 				return err
 			}
@@ -48,7 +52,10 @@ func newDeleteCmd() *cobra.Command {
 				return fmt.Errorf("get container %d: %w", vmid, err)
 			}
 
-			task, err := container.Delete(ctx, &proxmox.ContainerDeleteOptions{Force: proxmox.IntOrBool(force)})
+			task, err := container.Delete(ctx, &proxmox.ContainerDeleteOptions{
+				Force: proxmox.IntOrBool(force),
+				Purge: proxmox.IntOrBool(purge),
+			})
 			if err != nil {
 				return fmt.Errorf("delete container %d: %w", vmid, err)
 			}
@@ -64,6 +71,7 @@ func newDeleteCmd() *cobra.Command {
 	cmd.Flags().StringP("node", "n", "", "Node name")
 	cmd.Flags().IntP("vmid", "i", 0, "Container ID")
 	cmd.Flags().BoolP("force", "f", false, "Force deletion")
+	cmd.Flags().Bool("purge", false, "Also remove the container from backup, replication, and HA configurations")
 	for _, flag := range []string{"node", "vmid"} {
 		if err := cmd.MarkFlagRequired(flag); err != nil {
 			panic(err)

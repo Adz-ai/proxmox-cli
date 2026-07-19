@@ -27,6 +27,7 @@ type NodeInterface interface {
 
 // ContainerInterface defines the interface for container operations
 type ContainerInterface interface {
+	Details() ContainerDetails
 	Start(ctx context.Context) (*proxmox.Task, error)
 	Stop(ctx context.Context) (*proxmox.Task, error)
 	Shutdown(ctx context.Context, force bool, timeout int) (*proxmox.Task, error)
@@ -34,6 +35,19 @@ type ContainerInterface interface {
 	Delete(ctx context.Context, options *proxmox.ContainerDeleteOptions) (*proxmox.Task, error)
 	Clone(ctx context.Context, options *proxmox.ContainerCloneOptions) (int, *proxmox.Task, error)
 	Snapshots(ctx context.Context) ([]*proxmox.ContainerSnapshot, error)
+	NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error)
+}
+
+type ContainerDetails struct {
+	Name      string
+	Node      string
+	Status    string
+	Tags      string
+	CPUs      int
+	MaxMemory uint64
+	MaxSwap   uint64
+	MaxDisk   uint64
+	Uptime    uint64
 }
 
 // VirtualMachineInterface defines the interface for VM operations

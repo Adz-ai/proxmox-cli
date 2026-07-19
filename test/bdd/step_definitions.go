@@ -44,6 +44,7 @@ type TestContext struct {
 	lxcId            int
 	nodeName         string
 	containerOptions map[string]any
+	snapshotName     string
 }
 
 func InitializeScenario(ctx *godog.ScenarioContext) {
@@ -57,6 +58,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 		testCtx.commandError = nil
 		testCtx.specFilePath = ""
 		testCtx.containerOptions = make(map[string]any)
+		testCtx.snapshotName = ""
 		testCtx.ctrl = gomock.NewController(&testingT{})
 		testCtx.setupMocks()
 		testCtx.setupTestConfig()
@@ -88,6 +90,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^there are LXC containers on the cluster$`, testCtx.thereAreLXCContainersOnTheCluster)
 	ctx.Step(`^I should see a list of all LXC containers$`, testCtx.iShouldSeeListOfLXCContainers)
 	ctx.Step(`^an LXC container with ID (\d+) exists$`, testCtx.anLXCContainerExists)
+	ctx.Step(`^an LXC container with ID (\d+) has snapshots$`, testCtx.anLXCContainerHasSnapshots)
+	ctx.Step(`^a snapshot named "([^"]*)" should be created$`, testCtx.aSnapshotNamedShouldBeCreated)
+	ctx.Step(`^I should see a list of all snapshots$`, testCtx.iShouldSeeAListOfAllSnapshots)
 	ctx.Step(`^an LXC container with ID (\d+) is stopped$`, testCtx.anLXCContainerIsStopped)
 	ctx.Step(`^an LXC container with ID (\d+) is running$`, testCtx.anLXCContainerIsRunning)
 	ctx.Step(`^the container should be started successfully$`, testCtx.theContainerShouldBeStartedSuccessfully)
@@ -387,6 +392,28 @@ func (t *TestContext) setupExpectations(parts []string) error {
 					t.mockContainer.EXPECT().Delete(ctx, gomock.Any()).Return(task, nil)
 				}
 
+			case "snapshot":
+				if len(parts) < 3 {
+					break
+				}
+				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
+				t.mockNode.EXPECT().Container(ctx, t.lxcId).Return(t.mockContainer, nil)
+				switch parts[2] {
+				case "create":
+					task := &proxmox.Task{UPID: proxmox.UPID(fmt.Sprintf("UPID:%s:00001234:00112233:65432100:vzsnapshot", t.nodeName)), IsSuccessful: true}
+					t.mockContainer.EXPECT().NewSnapshot(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, name string) (*proxmox.Task, error) {
+						t.snapshotName = name
+						return task, nil
+					})
+				case "list":
+					snapshots := []*proxmox.ContainerSnapshot{
+						{Name: "current", Description: "You are here!"},
+						{Name: "test-snapshot", Description: "Nightly checkpoint", SnapshotCreationTime: 1750000000},
+						{Name: "pre-upgrade", SnapshotCreationTime: 1750100000},
+					}
+					t.mockContainer.EXPECT().Snapshots(ctx).Return(snapshots, nil)
+				}
+
 			case "describe":
 				// Mock getting node and container with details
 				t.mockClient.EXPECT().Node(ctx, t.nodeName).Return(t.mockNode, nil)
@@ -610,6 +637,40 @@ func (t *TestContext) iShouldSeeListOfLXCContainers() error {
 
 func (t *TestContext) anLXCContainerExists(id int) error {
 	t.lxcId = id
+	return nil
+}
+
+func (t *TestContext) anLXCContainerHasSnapshots(id int) error {
+	t.lxcId = id
+	return nil
+}
+
+func (t *TestContext) aSnapshotNamedShouldBeCreated(name string) error {
+	if t.commandError != nil {
+		return fmt.Errorf("snapshot create failed: %w", t.commandError)
+	}
+	if t.snapshotName != name {
+		return fmt.Errorf("snapshot created with name %q, want %q", t.snapshotName, name)
+	}
+	if !strings.Contains(t.commandOutput.String(), "created successfully") {
+		return fmt.Errorf("expected creation confirmation, got:\n%s", t.commandOutput.String())
+	}
+	return nil
+}
+
+func (t *TestContext) iShouldSeeAListOfAllSnapshots() error {
+	if t.commandError != nil {
+		return fmt.Errorf("snapshot list failed: %w", t.commandError)
+	}
+	output := t.commandOutput.String()
+	for _, name := range []string{"test-snapshot", "pre-upgrade"} {
+		if !strings.Contains(output, name) {
+			return fmt.Errorf("expected snapshot %q in output:\n%s", name, output)
+		}
+	}
+	if strings.Contains(output, "current") {
+		return fmt.Errorf("pseudo-snapshot \"current\" should not be listed:\n%s", output)
+	}
 	return nil
 }
 

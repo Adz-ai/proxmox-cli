@@ -119,6 +119,24 @@ func (r *RealContainer) Snapshots(ctx context.Context) ([]*proxmox.ContainerSnap
 	return r.container.Snapshots(ctx)
 }
 
+func (r *RealContainer) NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
+	return r.container.NewSnapshot(ctx, name)
+}
+
+func (r *RealContainer) Details() interfaces.ContainerDetails {
+	return interfaces.ContainerDetails{
+		Name:      r.container.Name,
+		Node:      r.container.Node,
+		Status:    r.container.Status,
+		Tags:      r.container.Tags,
+		CPUs:      r.container.CPUs,
+		MaxMemory: r.container.MaxMem,
+		MaxSwap:   r.container.MaxSwap,
+		MaxDisk:   r.container.MaxDisk,
+		Uptime:    r.container.Uptime,
+	}
+}
+
 func (r *RealVirtualMachine) Start(ctx context.Context) (*proxmox.Task, error) {
 	return r.vm.Start(ctx)
 }

@@ -18,9 +18,12 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(
 		newGetCmd(),
 		newCreateCmd(),
+		newDescribeCmd(),
 		newStartCmd(),
 		newStopCmd(),
+		newRestartCmd(),
 		newDeleteCmd(),
+		newSnapshotCmd(),
 	)
 	return cmd
 }
@@ -33,4 +36,29 @@ func validateContainerTarget(node string, vmid int) error {
 		return fmt.Errorf("container ID must be positive")
 	}
 	return nil
+}
+
+func addContainerTargetFlags(cmd *cobra.Command) {
+	cmd.Flags().StringP("node", "n", "", "Node name")
+	cmd.Flags().IntP("vmid", "i", 0, "Container ID")
+	for _, flag := range []string{"node", "vmid"} {
+		if err := cmd.MarkFlagRequired(flag); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func containerTargetFromFlags(cmd *cobra.Command) (string, int, error) {
+	node, err := cmd.Flags().GetString("node")
+	if err != nil {
+		return "", 0, fmt.Errorf("read node flag: %w", err)
+	}
+	vmid, err := cmd.Flags().GetInt("vmid")
+	if err != nil {
+		return "", 0, fmt.Errorf("read vmid flag: %w", err)
+	}
+	if err := validateContainerTarget(node, vmid); err != nil {
+		return "", 0, err
+	}
+	return node, vmid, nil
 }

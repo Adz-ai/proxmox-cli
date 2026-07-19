@@ -266,6 +266,35 @@ func (mr *MockContainerInterfaceMockRecorder) Delete(ctx, options any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockContainerInterface)(nil).Delete), ctx, options)
 }
 
+// Details mocks base method.
+func (m *MockContainerInterface) Details() interfaces.ContainerDetails {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Details")
+	ret0, _ := ret[0].(interfaces.ContainerDetails)
+	return ret0
+}
+
+// Details indicates an expected call of Details.
+func (mr *MockContainerInterfaceMockRecorder) Details() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Details", reflect.TypeOf((*MockContainerInterface)(nil).Details))
+}
+
+// NewSnapshot mocks base method.
+func (m *MockContainerInterface) NewSnapshot(ctx context.Context, name string) (*proxmox.Task, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewSnapshot", ctx, name)
+	ret0, _ := ret[0].(*proxmox.Task)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewSnapshot indicates an expected call of NewSnapshot.
+func (mr *MockContainerInterfaceMockRecorder) NewSnapshot(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewSnapshot", reflect.TypeOf((*MockContainerInterface)(nil).NewSnapshot), ctx, name)
+}
+
 // Reboot mocks base method.
 func (m *MockContainerInterface) Reboot(ctx context.Context) (*proxmox.Task, error) {
 	m.ctrl.T.Helper()

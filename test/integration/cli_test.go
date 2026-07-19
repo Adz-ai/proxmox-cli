@@ -171,6 +171,76 @@ func TestLXCStartCommand(t *testing.T) {
 	}
 }
 
+// TestVMStartCommand tests the vm start command
+func TestVMStartCommand(t *testing.T) {
+	setupTestConfig(t)
+	defer cleanupTestConfig()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := mocks.NewMockProxmoxClientInterface(ctrl)
+	mockNode := mocks.NewMockNodeInterface(ctrl)
+	mockVM := mocks.NewMockVirtualMachineInterface(ctrl)
+
+	ctx := gomock.Any()
+	mockClient.EXPECT().Node(ctx, "pve1").Return(mockNode, nil)
+	mockNode.EXPECT().VirtualMachine(ctx, 100).Return(mockVM, nil)
+	task := &proxmox.Task{
+		UPID:         proxmox.UPID("UPID:pve1:00001234:00112233:65432100:qmstart"),
+		IsSuccessful: true,
+	}
+	mockVM.EXPECT().Start(ctx).Return(task, nil)
+
+	utility.SetClientFactory(func() interfaces.ProxmoxClientInterface {
+		return mockClient
+	})
+	defer utility.ResetClientFactory()
+
+	output, err := executeCommand(t, []string{"vm", "start", "-n", "pve1", "-i", "100"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(output, []byte("VM 100 started successfully")) {
+		t.Errorf("Expected success message in output, got:\n%s", output)
+	}
+}
+
+// TestLXCSnapshotCreateCommand tests the lxc snapshot create command
+func TestLXCSnapshotCreateCommand(t *testing.T) {
+	setupTestConfig(t)
+	defer cleanupTestConfig()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := mocks.NewMockProxmoxClientInterface(ctrl)
+	mockNode := mocks.NewMockNodeInterface(ctrl)
+	mockContainer := mocks.NewMockContainerInterface(ctrl)
+
+	ctx := gomock.Any()
+	mockClient.EXPECT().Node(ctx, "pve1").Return(mockNode, nil)
+	mockNode.EXPECT().Container(ctx, 200).Return(mockContainer, nil)
+	task := &proxmox.Task{
+		UPID:         proxmox.UPID("UPID:pve1:00001234:00112233:65432100:vzsnapshot"),
+		IsSuccessful: true,
+	}
+	mockContainer.EXPECT().NewSnapshot(ctx, "nightly").Return(task, nil)
+
+	utility.SetClientFactory(func() interfaces.ProxmoxClientInterface {
+		return mockClient
+	})
+	defer utility.ResetClientFactory()
+
+	output, err := executeCommand(t, []string{"lxc", "snapshot", "create", "-n", "pve1", "-i", "200", "--name", "nightly"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(output, []byte(`Snapshot "nightly" created successfully for container 200`)) {
+		t.Errorf("Expected success message in output, got:\n%s", output)
+	}
+}
+
 // TestNodeGetCommand tests the nodes get command
 func TestNodeGetCommand(t *testing.T) {
 	ctrl := gomock.NewController(t)

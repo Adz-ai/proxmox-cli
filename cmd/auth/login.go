@@ -11,7 +11,6 @@ import (
 
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
@@ -75,7 +74,7 @@ func authenticateWithProxmox(cmd *cobra.Command, username, password string) erro
 	out := cmd.OutOrStdout()
 	in := cmd.InOrStdin()
 
-	serverURL := strings.TrimSpace(viper.GetString("server_url"))
+	serverURL := strings.TrimSpace(utility.ContextString("server_url"))
 	configuredURL := serverURL
 	if serverURL == "" {
 		reader := bufio.NewReader(in)
@@ -94,7 +93,7 @@ func authenticateWithProxmox(cmd *cobra.Command, username, password string) erro
 		return fmt.Errorf("invalid server URL: %w", err)
 	}
 	if configuredURL != serverURL {
-		viper.Set("server_url", serverURL)
+		utility.SetContextValue("server_url", serverURL)
 		if err := utility.WriteConfig(); err != nil {
 			return fmt.Errorf("save server URL: %w", err)
 		}
@@ -108,7 +107,7 @@ func authenticateWithProxmox(cmd *cobra.Command, username, password string) erro
 	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 	defer cancel()
 
-	httpClient, err := utility.NewHTTPClient(viper.GetBool("insecure"), viper.GetString("ca_cert"))
+	httpClient, err := utility.NewHTTPClient(utility.ContextBool("insecure"), utility.ContextString("ca_cert"))
 	if err != nil {
 		return fmt.Errorf("configure HTTP client: %w", err)
 	}
@@ -136,8 +135,8 @@ func authenticateWithProxmox(cmd *cobra.Command, username, password string) erro
 	// Any stored API token is cleared so the fresh login takes effect.
 	utility.ClearAuthTicket()
 	utility.ClearAPIToken()
-	viper.Set("auth_ticket.ticket", ticket.Ticket)
-	viper.Set("auth_ticket.CSRFPreventionToken", ticket.CSRFPreventionToken)
+	utility.SetContextValue("auth_ticket.ticket", ticket.Ticket)
+	utility.SetContextValue("auth_ticket.CSRFPreventionToken", ticket.CSRFPreventionToken)
 	if err := utility.WriteConfig(); err != nil {
 		return fmt.Errorf("save authentication: %w", err)
 	}

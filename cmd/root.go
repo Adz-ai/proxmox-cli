@@ -31,15 +31,34 @@ Get started:
   proxmox-cli auth login -u root@pam  # Authenticate
   proxmox-cli status                  # Check connection`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			contextName, err := cmd.Flags().GetString("context")
+			if err != nil {
+				return err
+			}
+			if contextName != "" {
+				if err := utility.ValidateContextName(contextName); err != nil {
+					return err
+				}
+			}
+			utility.SetActiveContextOverride(contextName)
 			return utility.LoadConfig()
 		},
 	}
 
 	cmd.PersistentFlags().Duration("timeout", utility.DefaultTaskTimeout, "Maximum time to wait for a Proxmox task to complete")
+	cmd.PersistentFlags().String("context", "", "Configuration context to use for this invocation")
+	_ = cmd.RegisterFlagCompletionFunc("context", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		names := []string{}
+		for _, context := range utility.ListContexts() {
+			names = append(names, context.Name)
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newStatusCmd())
 	cmd.AddCommand(newResourcesCmd())
+	cmd.AddCommand(newContextCmd())
 	cmd.AddCommand(nodes.NewCmd())
 	cmd.AddCommand(auth.NewCmd())
 	cmd.AddCommand(vm.NewCmd())

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func newInitCmd() *cobra.Command {
@@ -38,14 +37,14 @@ It will prompt you for the server URL and save it to the configuration file.`,
 			caCert = strings.TrimSpace(caCert)
 
 			// Check if already configured
-			existingURL := viper.GetString("server_url")
+			existingURL := utility.ContextString("server_url")
 			if existingURL != "" && !force {
 				fmt.Fprintf(out, "Already configured for server: %s\n", existingURL)
 				fmt.Fprintln(out, "Use --force to reconfigure")
 				return nil
 			}
-			existingInsecure := viper.GetBool("insecure")
-			existingCACert := viper.GetString("ca_cert")
+			existingInsecure := utility.ContextBool("insecure")
+			existingCACert := utility.ContextString("ca_cert")
 			if existingURL != "" && !cmd.Flags().Changed("insecure") {
 				insecure = existingInsecure
 			}
@@ -78,9 +77,9 @@ It will prompt you for the server URL and save it to the configuration file.`,
 				return err
 			}
 
-			viper.Set("server_url", serverURL)
-			viper.Set("insecure", insecure)
-			viper.Set("ca_cert", caCert)
+			utility.SetContextValue("server_url", serverURL)
+			utility.SetContextValue("insecure", insecure)
+			utility.SetContextValue("ca_cert", caCert)
 
 			if existingURL != "" && (existingURL != serverURL || existingInsecure != insecure || existingCACert != caCert) {
 				utility.ClearAuthTicket()

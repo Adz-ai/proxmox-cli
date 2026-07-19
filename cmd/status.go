@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -27,9 +26,10 @@ func newStatusCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(out, "\nConfig file: %s\n", configPath)
+			fmt.Fprintf(out, "Context: %s\n", utility.ActiveContext())
 
 			// Check server URL
-			serverURL := viper.GetString("server_url")
+			serverURL := utility.ContextString("server_url")
 			if serverURL == "" {
 				fmt.Fprintln(out, "\nStatus: Not configured")
 				fmt.Fprintln(out, "Run 'proxmox-cli init' to configure")

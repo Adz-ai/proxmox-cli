@@ -83,7 +83,22 @@ when prompted. Tokens do not expire and take precedence over a stored ticket.
 ```bash
 -o, --output table|json   # Structured output on get/describe/list commands
     --timeout <duration>  # Maximum time to wait for Proxmox tasks (default 10m)
+    --context <name>      # Target a specific cluster context for this command
 ```
+
+### Multiple Clusters (Contexts)
+```bash
+proxmox-cli --context work init                   # Configure a new context
+proxmox-cli --context work auth login -u root@pam # Authenticate it
+proxmox-cli context list                          # List contexts (* marks current)
+proxmox-cli context use work                      # Switch the current context
+proxmox-cli context delete old-lab                # Remove a context and its credentials
+proxmox-cli --context homelab vm get              # One-off command against another cluster
+```
+
+Each context holds its own server URL, TLS settings, and credentials.
+Existing single-cluster configurations are migrated into a context named
+`default` automatically the next time the CLI writes its config.
 
 ### Cluster Overview
 ```bash
@@ -221,22 +236,27 @@ TLS certificates are verified by default. For a private CA, configure its PEM fi
 ### Sample Configuration
 ```json
 {
-  "server_url": "https://your-proxmox:8006",
-  "insecure": false,
-  "ca_cert": "",
-  "auth_ticket": {
-    "ticket": "PVE:user@realm:...",
-    "CSRFPreventionToken": "..."
-  },
-  "api_token": {
-    "token_id": "user@realm!tokenname",
-    "secret": "..."
+  "current_context": "default",
+  "contexts": {
+    "default": {
+      "server_url": "https://your-proxmox:8006",
+      "insecure": false,
+      "ca_cert": "",
+      "auth_ticket": {
+        "ticket": "PVE:user@realm:...",
+        "CSRFPreventionToken": "..."
+      },
+      "api_token": {
+        "token_id": "user@realm!tokenname",
+        "secret": "..."
+      }
+    }
   }
 }
 ```
 
-Only one of `auth_ticket` or `api_token` is normally present; `api_token`
-wins when both are stored.
+Only one of `auth_ticket` or `api_token` is normally present per context;
+`api_token` wins when both are stored.
 
 ### Manual Configuration
 ```bash
@@ -341,6 +361,7 @@ proxmox-cli/
 ## Status & Roadmap
 
 ### Implemented Features
+- Multi-cluster contexts with per-context credentials and a --context flag
 - Session and API token authentication
 - Cluster-wide resource overview with type, node, and status filters
 - Node listing, details, storage, and task history
@@ -360,7 +381,6 @@ proxmox-cli/
 - TLS verification, custom CA support, and private config files
 
 ### Planned Features
-- Multi-cluster configuration profiles
 - Firewall rule management
 - User, group, and ACL administration
 - HA resource management

@@ -633,9 +633,18 @@ func (t *TestContext) iShouldSee(expected string) error {
 }
 
 func (t *TestContext) theConfigFileShouldContainServerURL(expectedURL string) error {
-	// Read config directly
-	_ = viper.ReadInConfig()
-	actualURL := viper.GetString("server_url")
+	// Read the persisted file with a fresh viper so in-memory overrides from
+	// earlier steps cannot mask what was actually written.
+	fresh := viper.New()
+	fresh.SetConfigFile(os.Getenv("PROXMOX_CLI_CONFIG"))
+	fresh.SetConfigType("json")
+	if err := fresh.ReadInConfig(); err != nil {
+		return fmt.Errorf("read config file: %w", err)
+	}
+	actualURL := fresh.GetString("contexts.default.server_url")
+	if actualURL == "" {
+		actualURL = fresh.GetString("server_url")
+	}
 	if actualURL != expectedURL {
 		return fmt.Errorf("expected server URL '%s', but got '%s'", expectedURL, actualURL)
 	}

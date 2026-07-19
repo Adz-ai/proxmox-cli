@@ -8,7 +8,6 @@ import (
 
 	"github.com/luthermonson/go-proxmox"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 )
@@ -47,7 +46,7 @@ piped) so it does not end up in your shell history.`,
 				return fmt.Errorf("token secret cannot be empty")
 			}
 
-			serverURL := strings.TrimSpace(viper.GetString("server_url"))
+			serverURL := strings.TrimSpace(utility.ContextString("server_url"))
 			if serverURL == "" {
 				return fmt.Errorf("server URL is not configured; run 'proxmox-cli init'")
 			}
@@ -61,7 +60,7 @@ piped) so it does not end up in your shell history.`,
 			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 			defer cancel()
 
-			httpClient, err := utility.NewHTTPClient(viper.GetBool("insecure"), viper.GetString("ca_cert"))
+			httpClient, err := utility.NewHTTPClient(utility.ContextBool("insecure"), utility.ContextString("ca_cert"))
 			if err != nil {
 				return fmt.Errorf("configure HTTP client: %w", err)
 			}
@@ -76,8 +75,8 @@ piped) so it does not end up in your shell history.`,
 
 			utility.ClearAuthTicket()
 			utility.ClearAPIToken()
-			viper.Set("api_token.token_id", tokenID)
-			viper.Set("api_token.secret", secret)
+			utility.SetContextValue("api_token.token_id", tokenID)
+			utility.SetContextValue("api_token.secret", secret)
 			if err := utility.WriteConfig(); err != nil {
 				return fmt.Errorf("save API token: %w", err)
 			}

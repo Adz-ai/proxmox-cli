@@ -386,9 +386,9 @@ var (
 
 func CheckIfAuthPresent() error {
 	// First check if the server URL is configured
-	serverURL := viper.GetString("server_url")
+	serverURL := ContextString("server_url")
 	if serverURL == "" {
-		return errors.New("not configured; run 'proxmox-cli init'")
+		return fmt.Errorf("context %q is not configured; run 'proxmox-cli init'", ActiveContext())
 	}
 
 	if HasAPIToken() || HasSessionTicket() {
@@ -397,16 +397,14 @@ func CheckIfAuthPresent() error {
 	return errors.New("not authenticated; run 'proxmox-cli auth login -u <username>' or 'proxmox-cli auth token -t <token-id>'")
 }
 
-// HasAPIToken reports whether an API token is stored in the configuration.
+// HasAPIToken reports whether an API token is stored for the active context.
 func HasAPIToken() bool {
-	token := viper.Sub("api_token")
-	return token != nil && token.GetString("token_id") != "" && token.GetString("secret") != ""
+	return ContextString("api_token.token_id") != "" && ContextString("api_token.secret") != ""
 }
 
-// HasSessionTicket reports whether a session ticket is stored in the configuration.
+// HasSessionTicket reports whether a session ticket is stored for the active context.
 func HasSessionTicket() bool {
-	authTicket := viper.Sub("auth_ticket")
-	return authTicket != nil && authTicket.GetString("ticket") != "" && authTicket.GetString("CSRFPreventionToken") != ""
+	return ContextString("auth_ticket.ticket") != "" && ContextString("auth_ticket.CSRFPreventionToken") != ""
 }
 
 // ClearAuthTicket blanks stored session credentials in viper's state. Viper
@@ -414,13 +412,19 @@ func HasSessionTicket() bool {
 // already loaded from the config file, so every existing subkey must be
 // overwritten individually for WriteConfig to persist the cleared state.
 func ClearAuthTicket() {
-	clearCredentialSection("auth_ticket")
+	clearCredentialSection(contextKey("auth_ticket"))
+	if ActiveContext() == DefaultContext {
+		clearCredentialSection("auth_ticket")
+	}
 }
 
 // ClearAPIToken blanks any stored API token; see ClearAuthTicket for the
 // viper key-shadowing details.
 func ClearAPIToken() {
-	clearCredentialSection("api_token")
+	clearCredentialSection(contextKey("api_token"))
+	if ActiveContext() == DefaultContext {
+		clearCredentialSection("api_token")
+	}
 }
 
 func clearCredentialSection(section string) {
@@ -441,7 +445,7 @@ func GetClient() (interfaces.ProxmoxClientInterface, error) {
 		return factory(), nil
 	}
 
-	endpoint := viper.GetString("server_url")
+	endpoint := ContextString("server_url")
 	if endpoint == "" {
 		return nil, errors.New("server URL is not configured")
 	}
@@ -450,7 +454,7 @@ func GetClient() (interfaces.ProxmoxClientInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	httpClient, err := NewHTTPClient(viper.GetBool("insecure"), viper.GetString("ca_cert"))
+	httpClient, err := NewHTTPClient(ContextBool("insecure"), ContextString("ca_cert"))
 	if err != nil {
 		return nil, err
 	}
@@ -458,15 +462,13 @@ func GetClient() (interfaces.ProxmoxClientInterface, error) {
 
 	var realClient *proxmox.Client
 	if HasAPIToken() {
-		token := viper.Sub("api_token")
 		realClient = proxmox.NewClient(apiEndpoint,
 			proxmox.WithHTTPClient(httpClient),
-			proxmox.WithAPIToken(token.GetString("token_id"), token.GetString("secret")))
+			proxmox.WithAPIToken(ContextString("api_token.token_id"), ContextString("api_token.secret")))
 	} else if HasSessionTicket() {
-		authTicket := viper.Sub("auth_ticket")
 		realClient = proxmox.NewClient(apiEndpoint,
 			proxmox.WithHTTPClient(httpClient),
-			proxmox.WithSession(authTicket.GetString("ticket"), authTicket.GetString("CSRFPreventionToken")))
+			proxmox.WithSession(ContextString("auth_ticket.ticket"), ContextString("auth_ticket.CSRFPreventionToken")))
 	}
 
 	if realClient == nil {
@@ -579,10 +581,10 @@ func LoadConfig() error {
 	return nil
 }
 
-// normalizeCredentials tidies the credential sections before they are
-// persisted: entries blanked by ClearAuthTicket/ClearAPIToken are dropped
-// (removing a section entirely once no credentials remain), and the CSRF
-// token key viper lowercases internally is restored to its documented casing.
+// normalizeCredentials tidies the credential sections of one context map:
+// entries blanked by ClearAuthTicket/ClearAPIToken are dropped (removing a
+// section entirely once no credentials remain), and the CSRF token key viper
+// lowercases internally is restored to its documented casing.
 func normalizeCredentials(settings map[string]any) {
 	for _, section := range []string{"auth_ticket", "api_token"} {
 		credentials, ok := settings[section].(map[string]any)
@@ -604,6 +606,75 @@ func normalizeCredentials(settings map[string]any) {
 	}
 }
 
+// migrateLegacySettings folds a pre-context flat configuration into the
+// contexts map so the persisted file always uses the current layout. Legacy
+// keys merge into their target context without overwriting newer values.
+func migrateLegacySettings(settings map[string]any) {
+	legacyKeys := []string{"server_url", "insecure", "ca_cert", "auth_ticket", "api_token"}
+	if serverURL, _ := settings["server_url"].(string); serverURL != "" {
+		target := DefaultContext
+		if current, _ := settings["current_context"].(string); current != "" {
+			target = current
+		}
+		contexts, ok := settings["contexts"].(map[string]any)
+		if !ok {
+			contexts = map[string]any{}
+			settings["contexts"] = contexts
+		}
+		contextMap, ok := contexts[target].(map[string]any)
+		if !ok {
+			contextMap = map[string]any{}
+			contexts[target] = contextMap
+		}
+		for _, key := range legacyKeys {
+			if value, exists := settings[key]; exists {
+				if _, taken := contextMap[key]; !taken {
+					contextMap[key] = value
+				}
+			}
+		}
+		if _, ok := settings["current_context"]; !ok {
+			settings["current_context"] = target
+		}
+	}
+	for _, key := range legacyKeys {
+		delete(settings, key)
+	}
+}
+
+// normalizeSettings prepares the full settings map for persistence:
+// legacy layouts are migrated, credentials are tidied per context, and
+// contexts without a server URL (the deletion mechanism) are dropped.
+func normalizeSettings(settings map[string]any) {
+	migrateLegacySettings(settings)
+	contexts, ok := settings["contexts"].(map[string]any)
+	if !ok {
+		delete(settings, "contexts")
+		delete(settings, "current_context")
+		return
+	}
+	for name, raw := range contexts {
+		contextMap, ok := raw.(map[string]any)
+		if !ok {
+			delete(contexts, name)
+			continue
+		}
+		for key, value := range contextMap {
+			if text, ok := value.(string); ok && text == "" {
+				delete(contextMap, key)
+			}
+		}
+		normalizeCredentials(contextMap)
+		if serverURL, _ := contextMap["server_url"].(string); serverURL == "" {
+			delete(contexts, name)
+		}
+	}
+	if len(contexts) == 0 {
+		delete(settings, "contexts")
+		delete(settings, "current_context")
+	}
+}
+
 func WriteConfig() error {
 	path, err := ConfigFile()
 	if err != nil {
@@ -613,7 +684,7 @@ func WriteConfig() error {
 		return fmt.Errorf("create configuration directory: %w", err)
 	}
 	settings := viper.AllSettings()
-	normalizeCredentials(settings)
+	normalizeSettings(settings)
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode configuration: %w", err)

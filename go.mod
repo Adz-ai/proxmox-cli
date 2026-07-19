@@ -2,6 +2,8 @@ module github.com/Adz-ai/proxmox-cli
 
 go 1.26.0
 
+toolchain go1.26.5
+
 require (
 	github.com/cucumber/godog v0.15.1
 	github.com/luthermonson/go-proxmox v0.8.1

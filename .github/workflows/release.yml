@@ -29,6 +29,7 @@ jobs:
         run: |
           mkdir dist
           GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/proxmox-cli-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/proxmox-cli-linux-arm64 .
           GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/proxmox-cli-darwin-amd64 .
           GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/proxmox-cli-darwin-arm64 .
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/proxmox-cli-windows-amd64.exe .

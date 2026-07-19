@@ -2,8 +2,10 @@ package integration_test
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/luthermonson/go-proxmox"
@@ -84,6 +86,45 @@ func TestLXCGetCommand(t *testing.T) {
 		if !bytes.Contains(output, []byte(expected)) {
 			t.Errorf("Expected output to contain '%s', but it didn't.\nActual output:\n%s", expected, output)
 		}
+	}
+}
+
+// TestLXCGetCommandContinuesAfterNodeFailure verifies that an unreachable
+// node does not hide containers on the healthy nodes, while the failure is
+// still reported through the exit status.
+func TestLXCGetCommandContinuesAfterNodeFailure(t *testing.T) {
+	setupTestConfig(t)
+	defer cleanupTestConfig()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := mocks.NewMockProxmoxClientInterface(ctrl)
+	mockNode := mocks.NewMockNodeInterface(ctrl)
+
+	ctx := gomock.Any()
+	nodes := proxmox.NodeStatuses{
+		&proxmox.NodeStatus{Node: "pve1", Status: "offline"},
+		&proxmox.NodeStatus{Node: "pve2", Status: "online"},
+	}
+	mockClient.EXPECT().Nodes(ctx).Return(nodes, nil)
+	mockClient.EXPECT().Node(ctx, "pve1").Return(nil, errors.New("node offline"))
+	mockClient.EXPECT().Node(ctx, "pve2").Return(mockNode, nil)
+	mockNode.EXPECT().Containers(ctx).Return(proxmox.Containers{
+		&proxmox.Container{VMID: 200, Name: "ct-web", Status: "running", Uptime: 3600},
+	}, nil)
+
+	utility.SetClientFactory(func() interfaces.ProxmoxClientInterface {
+		return mockClient
+	})
+	defer utility.ResetClientFactory()
+
+	output, err := executeCommand(t, []string{"lxc", "get"})
+	if err == nil || !strings.Contains(err.Error(), `get node "pve1"`) {
+		t.Fatalf("expected error mentioning the failed node, got %v", err)
+	}
+	if !bytes.Contains(output, []byte("ct-web")) {
+		t.Errorf("expected containers from healthy node in output, got:\n%s", output)
 	}
 }
 

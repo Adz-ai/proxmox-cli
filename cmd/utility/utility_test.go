@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -329,6 +330,29 @@ func TestWriteConfigPermissions(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("config permissions = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestWriteConfigCanonicalizesAuthTicket(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("PROXMOX_CLI_CONFIG", path)
+	viper.Set("server_url", "https://pve.example.com:8006")
+	viper.Set("auth_ticket.ticket", "ticket-value")
+	viper.Set("auth_ticket.CSRFPreventionToken", "token-value")
+	if err := WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"CSRFPreventionToken": "token-value"`) {
+		t.Fatalf("CSRF token key not written in documented casing:\n%s", data)
+	}
+	if strings.Contains(string(data), "csrfpreventiontoken") {
+		t.Fatalf("lowercased CSRF token key leaked into config file:\n%s", data)
 	}
 }
 

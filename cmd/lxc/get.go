@@ -1,6 +1,7 @@
 package lxc
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 
@@ -29,15 +30,18 @@ func newGetCmd() *cobra.Command {
 			fmt.Fprintln(out, "================")
 
 			totalContainers := 0
+			var nodeErrors []error
 			for _, nodeStatus := range nodes {
 				node, err := client.Node(ctx, nodeStatus.Node)
 				if err != nil {
-					return fmt.Errorf("get node %q: %w", nodeStatus.Node, err)
+					nodeErrors = append(nodeErrors, fmt.Errorf("get node %q: %w", nodeStatus.Node, err))
+					continue
 				}
 
 				containers, err := node.Containers(ctx)
 				if err != nil {
-					return fmt.Errorf("list containers on node %q: %w", nodeStatus.Node, err)
+					nodeErrors = append(nodeErrors, fmt.Errorf("list containers on node %q: %w", nodeStatus.Node, err))
+					continue
 				}
 
 				if len(containers) > 0 {
@@ -65,6 +69,9 @@ func newGetCmd() *cobra.Command {
 
 			if totalContainers == 0 {
 				fmt.Fprintln(out, "No LXC containers found in the cluster")
+			}
+			if err := errors.Join(nodeErrors...); err != nil {
+				return fmt.Errorf("list LXC containers: %w", err)
 			}
 			return nil
 		},

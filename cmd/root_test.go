@@ -124,6 +124,25 @@ func assertCredentialsCleared(t *testing.T, path string) {
 	if strings.Contains(string(data), "secret-ticket") || strings.Contains(string(data), "secret-token") {
 		t.Fatalf("credentials persisted in config file:\n%s", data)
 	}
+	if strings.Contains(string(data), "auth_ticket") {
+		t.Fatalf("cleared auth_ticket section should be dropped from config file:\n%s", data)
+	}
+}
+
+func TestLogoutDoesNotCreateConfig(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	dir := filepath.Join(t.TempDir(), "config")
+	t.Setenv("PROXMOX_CLI_CONFIG", filepath.Join(dir, "config.json"))
+
+	root := NewRootCmd()
+	root.SetArgs([]string{"auth", "logout"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("logout created config directory: %v", err)
+	}
 }
 
 func TestLogoutClearsPersistedCredentials(t *testing.T) {

@@ -339,6 +339,29 @@ func LoadConfig() error {
 	return nil
 }
 
+// normalizeAuthTicket tidies the auth_ticket section before it is persisted:
+// entries blanked by ClearAuthTicket are dropped (removing the section
+// entirely once no credentials remain), and the CSRF token key viper
+// lowercases internally is restored to its documented casing.
+func normalizeAuthTicket(settings map[string]any) {
+	authTicket, ok := settings["auth_ticket"].(map[string]any)
+	if !ok {
+		return
+	}
+	for key, value := range authTicket {
+		if text, ok := value.(string); ok && text == "" {
+			delete(authTicket, key)
+		}
+	}
+	if value, ok := authTicket["csrfpreventiontoken"]; ok {
+		delete(authTicket, "csrfpreventiontoken")
+		authTicket["CSRFPreventionToken"] = value
+	}
+	if len(authTicket) == 0 {
+		delete(settings, "auth_ticket")
+	}
+}
+
 func WriteConfig() error {
 	path, err := ConfigFile()
 	if err != nil {
@@ -347,7 +370,9 @@ func WriteConfig() error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create configuration directory: %w", err)
 	}
-	data, err := json.MarshalIndent(viper.AllSettings(), "", "  ")
+	settings := viper.AllSettings()
+	normalizeAuthTicket(settings)
+	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode configuration: %w", err)
 	}

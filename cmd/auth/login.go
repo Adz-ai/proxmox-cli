@@ -36,9 +36,7 @@ func newLoginCmd() *cobra.Command {
 				return fmt.Errorf("both username and password are required")
 			}
 
-			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
-			defer cancel()
-			return authenticateWithProxmox(ctx, cmd, username, password)
+			return authenticateWithProxmox(cmd, username, password)
 		},
 	}
 
@@ -71,7 +69,7 @@ func getPassword(cmd *cobra.Command) (string, error) {
 	return strings.TrimSpace(password), nil
 }
 
-func authenticateWithProxmox(ctx context.Context, cmd *cobra.Command, username, password string) error {
+func authenticateWithProxmox(cmd *cobra.Command, username, password string) error {
 	out := cmd.OutOrStdout()
 	in := cmd.InOrStdin()
 
@@ -103,6 +101,11 @@ func authenticateWithProxmox(ctx context.Context, cmd *cobra.Command, username, 
 
 	fmt.Fprintf(out, "Authenticating with Proxmox server at %s...\n", serverURL)
 
+	// Start the timeout only once all interactive prompting is done, so slow
+	// typing does not count against the API deadline.
+	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+	defer cancel()
+
 	httpClient, err := utility.NewHTTPClient(viper.GetBool("insecure"), viper.GetString("ca_cert"))
 	if err != nil {
 		return fmt.Errorf("configure HTTP client: %w", err)
@@ -126,7 +129,11 @@ func authenticateWithProxmox(ctx context.Context, cmd *cobra.Command, username, 
 		return fmt.Errorf("get Proxmox version: %w", err)
 	}
 
-	viper.Set("auth_ticket", ticket)
+	// Store only the credentials the CLI needs; the session also carries
+	// username, capabilities, and cluster name that don't belong in the config.
+	utility.ClearAuthTicket()
+	viper.Set("auth_ticket.ticket", ticket.Ticket)
+	viper.Set("auth_ticket.CSRFPreventionToken", ticket.CSRFPreventionToken)
 	if err := utility.WriteConfig(); err != nil {
 		return fmt.Errorf("save authentication: %w", err)
 	}

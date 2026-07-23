@@ -122,14 +122,17 @@ proxmox-cli tui                     # k9s-style terminal UI (or: proxmox-cli --t
 proxmox-cli tui --refresh 10s       # Slower auto-refresh (default 5s)
 ```
 
-The TUI shows live-refreshing views of guests, nodes, and storage:
+The TUI is styled after k9s: a header with cluster info (context, server,
+user, PVE version, aggregate CPU/MEM), keyboard hints, and live-refreshing
+views of guests, nodes, and storage in a bordered table with breadcrumbs.
 
 | Key | Action |
 |-----|--------|
 | `1` / `2` / `3`, `tab` | Switch between guests, nodes, and storage views |
+| `:` | Command mode (`guests`, `vm`, `lxc`, `nodes`, `storage`, `help`, `quit`) |
 | `j`/`k`, arrows, `g`/`G`, page keys | Move the selection |
 | `/` | Filter rows (`esc` clears) |
-| `enter` | Details for the selected row |
+| `enter` | Describe the selected row |
 | `s` / `d` / `x` / `r` | Start / shutdown / stop / reboot the selected guest |
 | `R` | Refresh immediately |
 | `?` | Keyboard reference |

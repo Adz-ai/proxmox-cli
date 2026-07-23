@@ -10,8 +10,14 @@ import (
 type Options struct {
 	// Source provides cluster state and guest actions.
 	Source DataSource
-	// ContextName is shown in the title bar.
+	// ContextName is shown in the cluster info block.
 	ContextName string
+	// Server is the cluster endpoint host shown in the cluster info block.
+	Server string
+	// User is the authenticated identity shown in the cluster info block.
+	User string
+	// CLIVersion is the proxmox-cli version shown in the cluster info block.
+	CLIVersion string
 	// Refresh is the auto-refresh interval; defaults to five seconds.
 	Refresh time.Duration
 }

@@ -124,6 +124,24 @@ func TestTUIDataSourceGuestActions(t *testing.T) {
 	}
 }
 
+func TestTUIDataSourceVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := mocks.NewMockProxmoxClientInterface(ctrl)
+	client.EXPECT().Version(gomock.Any()).Return(&proxmox.Version{Version: "8.4.1"}, nil)
+
+	source := &tuiDataSource{client: client}
+	version, err := source.Version(context.Background())
+	if err != nil || version != "8.4.1" {
+		t.Fatalf("version = %q, err = %v", version, err)
+	}
+}
+
+func TestDisplayServerAndUser(t *testing.T) {
+	if got := displayServer("https://pve.example.com:8006/"); got != "pve.example.com:8006" {
+		t.Errorf("displayServer = %q", got)
+	}
+}
+
 func TestTUIDataSourceRejectsNonGuests(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := mocks.NewMockProxmoxClientInterface(ctrl)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Adz-ai/proxmox-cli/cmd/utility"
@@ -54,8 +55,32 @@ func launchTUI(cmd *cobra.Command, refresh time.Duration) error {
 	return tui.Run(tui.Options{
 		Source:      &tuiDataSource{client: client, timeout: utility.TaskTimeout(cmd)},
 		ContextName: utility.ActiveContext(),
+		Server:      displayServer(utility.ContextString("server_url")),
+		User:        displayUser(),
+		CLIVersion:  cmd.Root().Version,
 		Refresh:     refresh,
 	})
+}
+
+// displayServer strips the scheme so the cluster info block stays compact.
+func displayServer(serverURL string) string {
+	serverURL = strings.TrimPrefix(serverURL, "https://")
+	serverURL = strings.TrimPrefix(serverURL, "http://")
+	return strings.TrimSuffix(serverURL, "/")
+}
+
+// displayUser is the authenticated identity: the API token ID when token
+// auth is configured, otherwise the username embedded in the session ticket
+// (formatted PVE:user@realm:...).
+func displayUser() string {
+	if tokenID := utility.ContextString("api_token.token_id"); tokenID != "" {
+		return tokenID
+	}
+	ticket := utility.ContextString("auth_ticket.ticket")
+	if parts := strings.Split(ticket, ":"); len(parts) >= 2 && parts[1] != "" {
+		return parts[1]
+	}
+	return "n/a"
 }
 
 // tuiDataSource adapts the Proxmox client interfaces to the TUI's DataSource.
@@ -111,6 +136,14 @@ func (d *tuiDataSource) Resources(ctx context.Context) ([]tui.Resource, error) {
 		rows = append(rows, row)
 	}
 	return rows, nil
+}
+
+func (d *tuiDataSource) Version(ctx context.Context) (string, error) {
+	version, err := d.client.Version(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get PVE version: %w", err)
+	}
+	return version.Version, nil
 }
 
 func (d *tuiDataSource) Guest(ctx context.Context, resource tui.Resource, action tui.Action) error {

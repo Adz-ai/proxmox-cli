@@ -52,4 +52,5 @@ type Resource struct {
 type DataSource interface {
 	Resources(ctx context.Context) ([]Resource, error)
 	Guest(ctx context.Context, resource Resource, action Action) error
+	Version(ctx context.Context) (string, error)
 }

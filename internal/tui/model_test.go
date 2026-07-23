@@ -32,6 +32,10 @@ func (f *fakeSource) Guest(ctx context.Context, resource Resource, action Action
 	return f.actionErr
 }
 
+func (f *fakeSource) Version(ctx context.Context) (string, error) {
+	return "8.4.1", nil
+}
+
 func (f *fakeSource) recorded() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -50,7 +54,13 @@ func fixtureRows() []Resource {
 func newTestModel(t *testing.T, rows []Resource) (Model, *fakeSource) {
 	t.Helper()
 	source := &fakeSource{rows: rows}
-	model := NewModel(Options{Source: source, ContextName: "default"})
+	model := NewModel(Options{
+		Source:      source,
+		ContextName: "default",
+		Server:      "pve.example.com",
+		User:        "root@pam!cli",
+		CLIVersion:  "test",
+	})
 	next, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	next, _ = next.Update(resourcesMsg{rows: rows})
 	return next.(Model), source
@@ -235,14 +245,16 @@ func TestSelectionSurvivesRefresh(t *testing.T) {
 
 func TestViewRendersTableAndOverlays(t *testing.T) {
 	model, _ := newTestModel(t, fixtureRows())
+	next, _ := model.Update(versionMsg{version: "8.4.1"})
+	model = next.(Model)
 	output := model.View()
-	for _, want := range []string{"proxmox-cli", "context: default", "VMID", "web", "db"} {
+	for _, want := range []string{"Context:", "default", "pve.example.com", "root@pam!cli", "8.4.1", "VMID", "web", "db", "Guests", "<guests>"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("view missing %q:\n%s", want, output)
 		}
 	}
 	model, _ = press(t, model, "?")
-	if !strings.Contains(model.View(), "Keyboard reference") {
+	if !strings.Contains(model.View(), "Guest actions") {
 		t.Error("help overlay should render")
 	}
 	model, _ = press(t, model, "q")
@@ -253,5 +265,37 @@ func TestViewRendersTableAndOverlays(t *testing.T) {
 	model, _ = press(t, model, "esc", "x")
 	if !strings.Contains(model.View(), "Confirm stop") {
 		t.Errorf("confirm overlay should render:\n%s", model.View())
+	}
+}
+
+func TestCommandModeSwitchesViews(t *testing.T) {
+	model, _ := newTestModel(t, fixtureRows())
+	model, _ = press(t, model, ":", "n", "o", "d", "e", "s", "enter")
+	rows := model.visibleRows()
+	if len(rows) != 1 || rows[0].Kind != KindNode {
+		t.Fatalf(":nodes should switch to the nodes view, got %+v", rows)
+	}
+
+	model, _ = press(t, model, ":", "v", "m", "enter")
+	rows = model.visibleRows()
+	if model.kindFilter != KindVM || len(rows) != 1 || rows[0].Kind != KindVM {
+		t.Fatalf(":vm should scope guests to VMs, got filter %q rows %+v", model.kindFilter, rows)
+	}
+	model, _ = press(t, model, "esc")
+	if model.kindFilter != "" || len(model.visibleRows()) != 2 {
+		t.Fatal("esc should clear the kind scope")
+	}
+
+	model, cmd := press(t, model, ":", "b", "o", "g", "u", "s", "enter")
+	if cmd != nil || !model.statusIsError {
+		t.Fatalf("unknown command should flash an error, got %q", model.status)
+	}
+
+	_, cmd = press(t, model, ":", "q", "enter")
+	if cmd == nil {
+		t.Fatal(":q should quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal(":q should produce a quit message")
 	}
 }

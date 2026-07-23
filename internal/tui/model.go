@@ -50,6 +50,10 @@ type resourcesMsg struct {
 	err  error
 }
 
+type versionMsg struct {
+	version string
+}
+
 type actionDoneMsg struct {
 	resource Resource
 	action   Action
@@ -67,17 +71,25 @@ type confirmState struct {
 type Model struct {
 	source      DataSource
 	contextName string
+	server      string
+	user        string
+	cliVersion  string
+	pveVersion  string
 	refresh     time.Duration
 
 	width  int
 	height int
 
-	view      view
-	rows      []Resource
-	cursor    int
-	offset    int
-	filter    string
-	filtering bool
+	view       view
+	kindFilter Kind
+	rows       []Resource
+	cursor     int
+	offset     int
+	filter     string
+	filtering  bool
+
+	commandMode bool
+	command     string
 
 	confirm  *confirmState
 	details  *Resource
@@ -99,6 +111,9 @@ func NewModel(opts Options) Model {
 	return Model{
 		source:      opts.Source,
 		contextName: opts.ContextName,
+		server:      opts.Server,
+		user:        opts.User,
+		cliVersion:  opts.CLIVersion,
 		refresh:     refresh,
 		loading:     true,
 		inFlight:    map[string]Action{},
@@ -107,7 +122,7 @@ func NewModel(opts Options) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.fetchCmd(), m.tickCmd())
+	return tea.Batch(m.fetchCmd(), m.versionCmd(), m.tickCmd())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -115,6 +130,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clampCursor()
+		return m, nil
+	case versionMsg:
+		m.pveVersion = msg.version
 		return m, nil
 	case resourcesMsg:
 		m.loading = false
@@ -178,6 +196,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.filtering {
 		return m.handleFilterKey(msg)
 	}
+	if m.commandMode {
+		return m.handleCommandKey(msg)
+	}
 	switch key {
 	case "q":
 		return m, tea.Quit
@@ -205,8 +226,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clampCursor()
 	case "/":
 		m.filtering = true
+	case ":":
+		m.commandMode = true
+		m.command = ""
 	case "esc":
 		m.filter = ""
+		m.kindFilter = ""
 		m.clampCursor()
 	case "enter":
 		if resource, ok := m.selectedResource(); ok {
@@ -255,6 +280,57 @@ func (m Model) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		m.commandMode = false
+		return m.executeCommand(strings.ToLower(strings.TrimSpace(m.command)))
+	case "esc":
+		m.commandMode = false
+		m.command = ""
+	case "backspace":
+		if runes := []rune(m.command); len(runes) > 0 {
+			m.command = string(runes[:len(runes)-1])
+		}
+	default:
+		switch msg.Type {
+		case tea.KeyRunes:
+			m.command += string(msg.Runes)
+		case tea.KeySpace:
+			m.command += " "
+		}
+	}
+	return m, nil
+}
+
+// executeCommand dispatches a k9s-style ":" command.
+func (m Model) executeCommand(command string) (tea.Model, tea.Cmd) {
+	switch command {
+	case "":
+	case "q", "quit", "q!":
+		return m, tea.Quit
+	case "guests", "guest", "all":
+		m.switchView(viewGuests)
+	case "vm", "vms", "qemu":
+		m.switchView(viewGuests)
+		m.kindFilter = KindVM
+		m.clampCursor()
+	case "lxc", "ct", "container", "containers":
+		m.switchView(viewGuests)
+		m.kindFilter = KindLXC
+		m.clampCursor()
+	case "nodes", "node", "no":
+		m.switchView(viewNodes)
+	case "storage", "st", "sto":
+		m.switchView(viewStorage)
+	case "help", "h":
+		m.showHelp = true
+	default:
+		m.setStatus(fmt.Sprintf("invalid command %q", command), true)
+	}
+	return m, nil
+}
+
 func (m Model) requestAction(action Action) (tea.Model, tea.Cmd) {
 	resource, ok := m.selectedResource()
 	if !ok {
@@ -297,6 +373,17 @@ func (m Model) fetchCmd() tea.Cmd {
 	}
 }
 
+func (m Model) versionCmd() tea.Cmd {
+	source := m.source
+	return func() tea.Msg {
+		version, err := source.Version(context.Background())
+		if err != nil {
+			return versionMsg{version: "n/a"}
+		}
+		return versionMsg{version: version}
+	}
+}
+
 func (m Model) tickCmd() tea.Cmd {
 	return tea.Tick(m.refresh, func(t time.Time) tea.Msg {
 		return tickMsg(t)
@@ -310,6 +397,7 @@ func (m *Model) setStatus(message string, isError bool) {
 
 func (m *Model) switchView(target view) {
 	if m.view == target {
+		m.kindFilter = ""
 		return
 	}
 	m.view = target
@@ -317,6 +405,7 @@ func (m *Model) switchView(target view) {
 	m.offset = 0
 	m.filter = ""
 	m.filtering = false
+	m.kindFilter = ""
 }
 
 func (m *Model) moveCursor(delta int) {
@@ -344,9 +433,15 @@ func (m *Model) clampCursor() {
 	}
 }
 
-// pageSize is the number of table rows that fit in the current terminal.
+// pageSize is the number of table rows that fit in the current terminal:
+// total height minus the header block, the table border and column header,
+// the crumbs line, and the command prompt when it is open.
 func (m *Model) pageSize() int {
-	page := m.height - 5
+	chrome := headerHeight + 3 + 1
+	if m.commandMode {
+		chrome++
+	}
+	page := m.height - chrome
 	if page < 1 {
 		page = 1
 	}
@@ -357,6 +452,9 @@ func (m *Model) visibleRows() []Resource {
 	rows := make([]Resource, 0, len(m.rows))
 	for _, resource := range m.rows {
 		if !m.view.includes(resource.Kind) {
+			continue
+		}
+		if m.kindFilter != "" && resource.Kind != m.kindFilter {
 			continue
 		}
 		if m.filter != "" && !matchesFilter(resource, m.filter) {
@@ -392,19 +490,6 @@ func (m *Model) restoreSelection(id string) {
 		}
 	}
 	m.clampCursor()
-}
-
-func (m *Model) countByKind(kinds ...Kind) int {
-	count := 0
-	for _, resource := range m.rows {
-		for _, kind := range kinds {
-			if resource.Kind == kind {
-				count++
-				break
-			}
-		}
-	}
-	return count
 }
 
 func matchesFilter(resource Resource, filter string) bool {

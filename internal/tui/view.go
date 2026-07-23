@@ -7,18 +7,76 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// headerHeight is the k9s-style header block: cluster info, menu hints, logo.
+const headerHeight = 7
+
+// The palette mirrors the k9s default skin.
 var (
-	titleStyle    = lipgloss.NewStyle().Bold(true)
-	faintStyle    = lipgloss.NewStyle().Faint(true)
-	activeTab     = lipgloss.NewStyle().Bold(true).Underline(true)
-	headerStyle   = lipgloss.NewStyle().Bold(true)
-	selectedStyle = lipgloss.NewStyle().Reverse(true)
-	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	runningStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	pendingStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	templateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-	overlayStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+	colorAqua       = lipgloss.Color("#00ffff")
+	colorBlue       = lipgloss.Color("#1e90ff") // dodgerblue
+	colorOrange     = lipgloss.Color("#ffa500")
+	colorFuchsia    = lipgloss.Color("#ff00ff")
+	colorPapaya     = lipgloss.Color("#ffefd5") // papayawhip
+	colorSeagreen   = lipgloss.Color("#2e8b57")
+	colorLawnGreen  = lipgloss.Color("#7cfc00")
+	colorTurquoise  = lipgloss.Color("#00ced1") // darkturquoise
+	colorOrangeRed  = lipgloss.Color("#ff4500")
+	colorDarkOrange = lipgloss.Color("#ff8c00")
+	colorSlateGray  = lipgloss.Color("#778899") // lightslategray
+	colorPurple     = lipgloss.Color("#9370db") // mediumpurple
+	colorSteelBlue  = lipgloss.Color("#4682b4")
+	colorPaleGreen  = lipgloss.Color("#98fb98")
+	colorWhite      = lipgloss.Color("#ffffff")
+	colorBlack      = lipgloss.Color("#000000")
+
+	sectionStyle = lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
+	infoStyle    = lipgloss.NewStyle().Foreground(colorOrange)
+	revStyle     = lipgloss.NewStyle().Foreground(colorAqua)
+	cpuStyle     = lipgloss.NewStyle().Foreground(colorLawnGreen)
+	memStyle     = lipgloss.NewStyle().Foreground(colorTurquoise)
+	logoStyle    = lipgloss.NewStyle().Foreground(colorOrange).Bold(true)
+
+	menuKeyStyle  = lipgloss.NewStyle().Foreground(colorBlue).Bold(true)
+	menuNumStyle  = lipgloss.NewStyle().Foreground(colorFuchsia).Bold(true)
+	menuDescStyle = lipgloss.NewStyle().Foreground(colorWhite)
+
+	borderStyle      = lipgloss.NewStyle().Foreground(colorBlue)
+	titleStyle       = lipgloss.NewStyle().Foreground(colorAqua).Bold(true)
+	titleDecorStyle  = lipgloss.NewStyle().Foreground(colorAqua)
+	titleScopeStyle  = lipgloss.NewStyle().Foreground(colorFuchsia).Bold(true)
+	titleCountStyle  = lipgloss.NewStyle().Foreground(colorPapaya).Bold(true)
+	titleFilterStyle = lipgloss.NewStyle().Foreground(colorSeagreen).Bold(true)
+	tableHeaderStyle = lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
+	cursorStyle      = lipgloss.NewStyle().Foreground(colorBlack).Background(colorAqua).Bold(true)
+	rowStyleDefault  = lipgloss.NewStyle().Foreground(colorAqua)
+	rowStyleStopped  = lipgloss.NewStyle().Foreground(colorSlateGray)
+	rowStylePending  = lipgloss.NewStyle().Foreground(colorDarkOrange)
+	rowStyleError    = lipgloss.NewStyle().Foreground(colorOrangeRed)
+	rowStyleTemplate = lipgloss.NewStyle().Foreground(colorPurple)
+
+	crumbStyle       = lipgloss.NewStyle().Foreground(colorBlack).Background(colorAqua).Bold(true)
+	crumbActiveStyle = lipgloss.NewStyle().Foreground(colorBlack).Background(colorOrange).Bold(true)
+	flashErrorStyle  = lipgloss.NewStyle().Foreground(colorOrangeRed)
+	flashInfoStyle   = lipgloss.NewStyle().Foreground(colorPaleGreen)
+
+	promptStyle     = lipgloss.NewStyle().Foreground(colorAqua).Bold(true)
+	promptTextStyle = lipgloss.NewStyle().Foreground(colorWhite)
+
+	describeKeyStyle   = lipgloss.NewStyle().Foreground(colorSteelBlue).Bold(true)
+	describeValueStyle = lipgloss.NewStyle().Foreground(colorPapaya)
+	helpSectionStyle   = lipgloss.NewStyle().Foreground(colorAqua).Bold(true)
+	dimStyle           = lipgloss.NewStyle().Foreground(colorSlateGray)
 )
+
+// logoLines is "PVE" in the same block style as the k9s logo.
+var logoLines = []string{
+	` _____  __      __ ______ `,
+	`|  __ \ \ \    / /|  ____|`,
+	`| |__) | \ \  / / | |__   `,
+	`|  ___/   \ \/ /  |  __|  `,
+	`| |        \  /   | |____ `,
+	`|_|         \/    |______|`,
+}
 
 type column struct {
 	title string
@@ -29,18 +87,15 @@ func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-	lines := []string{m.renderTitle(), m.renderTabs()}
-	switch {
-	case m.confirm != nil:
-		lines = append(lines, m.renderOverlay(m.confirmLines()))
-	case m.details != nil:
-		lines = append(lines, m.renderOverlay(m.detailLines(*m.details)))
-	case m.showHelp:
-		lines = append(lines, m.renderOverlay(helpLines()))
-	default:
-		lines = append(lines, m.renderTable()...)
+	if m.width < 70 || m.height < 16 {
+		return "proxmox-cli: terminal too small (need at least 70x16)"
 	}
-	lines = append(lines, m.renderStatusLine(), m.renderHints())
+	lines := m.renderHeader()
+	if m.commandMode {
+		lines = append(lines, m.renderPrompt())
+	}
+	lines = append(lines, m.renderBody()...)
+	lines = append(lines, m.renderCrumbs())
 	clip := lipgloss.NewStyle().MaxWidth(m.width)
 	for index := range lines {
 		lines[index] = clip.Render(lines[index])
@@ -48,42 +103,246 @@ func (m Model) View() string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) renderTitle() string {
-	parts := []string{titleStyle.Render("proxmox-cli"), "context: " + m.contextName}
-	if !m.lastSync.IsZero() {
-		parts = append(parts, "refreshed "+m.lastSync.Format("15:04:05"))
+// renderHeader lays out the cluster info block, the menu hints, and the logo
+// side by side, like the k9s header.
+func (m Model) renderHeader() []string {
+	info := m.infoLines()
+	menu := menuLines()
+	logo := make([]string, len(logoLines))
+	for index, line := range logoLines {
+		logo[index] = logoStyle.Render(line)
 	}
-	if m.loading {
-		parts = append(parts, "refreshing...")
+
+	infoWidth := blockWidth(info)
+	menuWidth := blockWidth(menu)
+	logoWidth := blockWidth(logo)
+	showMenu := m.width >= infoWidth+menuWidth+4
+	showLogo := m.width >= infoWidth+menuWidth+logoWidth+8
+
+	lines := make([]string, headerHeight)
+	for index := range lines {
+		line := padVisible(blockLine(info, index), infoWidth)
+		if showMenu {
+			line += "    " + padVisible(blockLine(menu, index), menuWidth)
+		}
+		if showLogo {
+			gap := m.width - lipgloss.Width(line) - logoWidth - 1
+			if gap > 0 {
+				line += strings.Repeat(" ", gap) + blockLine(logo, index)
+			}
+		}
+		lines[index] = line
 	}
-	return strings.Join(parts, "  |  ")
+	return lines
 }
 
-func (m Model) renderTabs() string {
-	tabs := []string{}
-	counts := map[view]int{
-		viewGuests:  m.countByKind(KindVM, KindLXC),
-		viewNodes:   m.countByKind(KindNode),
-		viewStorage: m.countByKind(KindStorage),
+func (m Model) infoLines() []string {
+	pve := m.pveVersion
+	if pve == "" {
+		pve = "n/a"
 	}
-	for _, v := range []view{viewGuests, viewNodes, viewStorage} {
-		label := fmt.Sprintf("[%d] %s (%d)", int(v)+1, v.title(), counts[v])
-		if v == m.view {
-			tabs = append(tabs, activeTab.Render(label))
-		} else {
-			tabs = append(tabs, faintStyle.Render(label))
+	rows := []struct {
+		label string
+		value string
+		style lipgloss.Style
+	}{
+		{"Context:", m.contextName, infoStyle},
+		{"Cluster:", m.server, infoStyle},
+		{"User:", m.user, infoStyle},
+		{"CLI Rev:", m.cliVersion, revStyle},
+		{"PVE Rev:", pve, revStyle},
+		{"CPU:", m.clusterCPU(), cpuStyle},
+		{"MEM:", m.clusterMEM(), memStyle},
+	}
+	lines := make([]string, 0, len(rows))
+	for _, row := range rows {
+		value := row.value
+		if value == "" {
+			value = "n/a"
+		}
+		lines = append(lines, sectionStyle.Render(pad(row.label, 9))+row.style.Render(truncate(value, 32)))
+	}
+	return lines
+}
+
+// clusterCPU is the load across all online nodes, weighted by core count.
+func (m Model) clusterCPU() string {
+	var used, cores float64
+	for _, resource := range m.rows {
+		if resource.Kind == KindNode {
+			used += resource.CPU * float64(resource.MaxCPU)
+			cores += float64(resource.MaxCPU)
 		}
 	}
-	return strings.Join(tabs, "   ")
+	if cores == 0 {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.0f%%", used/cores*100)
 }
 
-func (m Model) renderTable() []string {
-	columns, statusIndex := m.columns()
+func (m Model) clusterMEM() string {
+	var used, total uint64
+	for _, resource := range m.rows {
+		if resource.Kind == KindNode {
+			used += resource.Mem
+			total += resource.MaxMem
+		}
+	}
+	if total == 0 {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.0f%%", float64(used)/float64(total)*100)
+}
+
+type menuHint struct {
+	key     string
+	desc    string
+	numeric bool
+}
+
+func menuLines() []string {
+	columns := [][]menuHint{
+		{
+			{"1", "guests", true},
+			{"2", "nodes", true},
+			{"3", "storage", true},
+			{"/", "filter", false},
+			{":", "command", false},
+			{"enter", "details", false},
+		},
+		{
+			{"s", "start", false},
+			{"d", "shutdown", false},
+			{"x", "stop", false},
+			{"r", "reboot", false},
+			{"R", "refresh", false},
+			{"?", "help", false},
+		},
+		{
+			{"j/k", "move", false},
+			{"g/G", "jump", false},
+			{"tab", "cycle view", false},
+			{"esc", "clear", false},
+			{"q", "quit", false},
+		},
+	}
+	lines := make([]string, headerHeight)
+	for row := range lines {
+		parts := make([]string, 0, len(columns))
+		for _, col := range columns {
+			if row >= len(col) {
+				parts = append(parts, strings.Repeat(" ", 20))
+				continue
+			}
+			hint := col[row]
+			keyStyle := menuKeyStyle
+			if hint.numeric {
+				keyStyle = menuNumStyle
+			}
+			parts = append(parts, keyStyle.Render(pad("<"+hint.key+">", 8))+menuDescStyle.Render(pad(hint.desc, 12)))
+		}
+		lines[row] = strings.Join(parts, "")
+	}
+	return lines
+}
+
+func (m Model) renderPrompt() string {
+	return " " + promptStyle.Render("> ") + promptTextStyle.Render(m.command) + cursorStyle.Render(" ")
+}
+
+// renderBody draws the bordered table box, or an overlay box in its place.
+func (m Model) renderBody() []string {
+	innerHeight := m.pageSize() + 1
+	switch {
+	case m.confirm != nil:
+		return m.renderBox(m.confirmTitle(), m.confirmLines(), innerHeight)
+	case m.details != nil:
+		return m.renderBox(m.describeTitle(*m.details), m.detailLines(*m.details), innerHeight)
+	case m.showHelp:
+		return m.renderBox(boxTitle("Help", "", 0, false), helpLines(), innerHeight)
+	default:
+		return m.renderBox(m.tableTitle(), m.tableLines(), innerHeight)
+	}
+}
+
+// renderBox draws a k9s-style bordered panel with the title embedded in the
+// top border.
+func (m Model) renderBox(title string, content []string, innerHeight int) []string {
+	innerWidth := m.width - 4
+	titleWidth := lipgloss.Width(title)
+	fill := m.width - 3 - titleWidth
+	if fill < 0 {
+		fill = 0
+	}
+	lines := make([]string, 0, innerHeight+2)
+	lines = append(lines, borderStyle.Render("┌─")+title+borderStyle.Render(strings.Repeat("─", fill)+"┐"))
+	edge := borderStyle.Render("│")
+	clip := lipgloss.NewStyle().MaxWidth(innerWidth)
+	for index := 0; index < innerHeight; index++ {
+		line := ""
+		if index < len(content) {
+			line = clip.Render(content[index])
+		}
+		lines = append(lines, edge+" "+padVisible(line, innerWidth)+" "+edge)
+	}
+	lines = append(lines, borderStyle.Render("└"+strings.Repeat("─", m.width-2)+"┘"))
+	return lines
+}
+
+// boxTitle renders " Name(scope)[count] " with k9s title colors. The scope
+// segment is omitted when scope is empty and withCount controls the counter.
+func boxTitle(name, scope string, count int, withCount bool) string {
+	title := " " + titleStyle.Render(name)
+	if scope != "" {
+		title += titleDecorStyle.Render("(") + titleScopeStyle.Render(scope) + titleDecorStyle.Render(")")
+	}
+	if withCount {
+		title += titleDecorStyle.Render("[") + titleCountStyle.Render(fmt.Sprintf("%d", count)) + titleDecorStyle.Render("]")
+	}
+	return title + " "
+}
+
+func (m Model) tableTitle() string {
+	scope := ""
+	if m.view == viewGuests {
+		scope = "all"
+		if m.kindFilter != "" {
+			scope = string(m.kindFilter)
+		}
+	}
+	title := boxTitle(m.view.title(), scope, len(m.visibleRows()), true)
+	if m.filtering || m.filter != "" {
+		segment := "/" + m.filter
+		if m.filtering {
+			segment += "_"
+		}
+		title += titleDecorStyle.Render("<") + titleFilterStyle.Render(segment) + titleDecorStyle.Render("> ")
+	}
+	if m.loading {
+		title += dimStyle.Render("refreshing... ")
+	}
+	return title
+}
+
+func (m Model) describeTitle(resource Resource) string {
+	scope := string(resource.Kind) + "/" + resource.Name
+	if resource.VMID > 0 {
+		scope = fmt.Sprintf("%s/%d", resource.Kind, resource.VMID)
+	}
+	return boxTitle("Describe", scope, 0, false)
+}
+
+func (m Model) confirmTitle() string {
+	return boxTitle("Confirm", string(m.confirm.action), 0, false)
+}
+
+func (m Model) tableLines() []string {
+	columns := m.columns()
 	headerCells := make([]string, len(columns))
 	for index, col := range columns {
 		headerCells[index] = pad(col.title, col.width)
 	}
-	lines := []string{headerStyle.Render(strings.Join(headerCells, "  "))}
+	lines := []string{tableHeaderStyle.Render(strings.Join(headerCells, "  "))}
 
 	rows := m.visibleRows()
 	page := m.pageSize()
@@ -91,38 +350,57 @@ func (m Model) renderTable() []string {
 	if end > len(rows) {
 		end = len(rows)
 	}
+	innerWidth := m.width - 4
 	for index := m.offset; index < end; index++ {
 		resource := rows[index]
 		cells := m.rowCells(resource, columns)
+		row := pad(strings.Join(cells, "  "), innerWidth)
 		if index == m.cursor {
-			lines = append(lines, selectedStyle.Render(strings.Join(cells, "  ")))
+			lines = append(lines, cursorStyle.Render(row))
 			continue
 		}
-		if style, ok := m.statusStyle(resource); ok {
-			cells[statusIndex] = style.Render(cells[statusIndex])
-		}
-		lines = append(lines, strings.Join(cells, "  "))
+		lines = append(lines, m.rowStyle(resource).Render(row))
 	}
 	if len(rows) == 0 {
 		empty := "No resources"
 		if m.filter != "" {
 			empty = fmt.Sprintf("No matches for filter %q", m.filter)
 		}
-		lines = append(lines, faintStyle.Render(empty))
-	}
-	for len(lines) < page+1 {
-		lines = append(lines, "")
+		lines = append(lines, dimStyle.Render(empty))
 	}
 	return lines
 }
 
-// columns returns the column layout for the active view along with the index
-// of the status column, which gets state-dependent coloring.
-func (m Model) columns() ([]column, int) {
+// rowStyle colors a whole row by guest state, like k9s status-based rows.
+func (m Model) rowStyle(resource Resource) lipgloss.Style {
+	if _, busy := m.inFlight[resource.ID]; busy {
+		return rowStylePending
+	}
+	if resource.Template {
+		return rowStyleTemplate
+	}
+	switch resource.Status {
+	case "running", "online", "available":
+		return rowStyleDefault
+	case "stopped", "offline":
+		return rowStyleStopped
+	case "paused", "suspended":
+		return rowStylePending
+	case "unknown", "error":
+		return rowStyleError
+	default:
+		return rowStyleDefault
+	}
+}
+
+// columns returns the column layout for the active view, sized against the
+// box interior.
+func (m Model) columns() []column {
+	inner := m.width - 4
 	switch m.view {
 	case viewNodes:
 		return []column{
-			{"NAME", m.flexWidth(63, 8)},
+			{"NAME", flexWidth(inner, 63, 8)},
 			{"STATUS", 10},
 			{"CPU", 7},
 			{"CPUS", 5},
@@ -131,10 +409,10 @@ func (m Model) columns() ([]column, int) {
 			{"MEM%", 6},
 			{"DISK%", 6},
 			{"UPTIME", 9},
-		}, 1
+		}
 	case viewStorage:
 		return []column{
-			{"NAME", m.flexWidth(64, 7)},
+			{"NAME", flexWidth(inner, 64, 7)},
 			{"NODE", 12},
 			{"STATUS", 10},
 			{"TYPE", 10},
@@ -142,27 +420,27 @@ func (m Model) columns() ([]column, int) {
 			{"TOTAL", 10},
 			{"USE%", 6},
 			{"SHARED", 6},
-		}, 2
+		}
 	default:
 		return []column{
 			{"KIND", 4},
 			{"VMID", 6},
-			{"NAME", m.flexWidth(66, 8)},
+			{"NAME", flexWidth(inner, 66, 8)},
 			{"NODE", 12},
 			{"STATUS", 12},
 			{"CPU", 7},
 			{"MEM", 10},
 			{"MEM%", 6},
 			{"UPTIME", 9},
-		}, 4
+		}
 	}
 }
 
-// flexWidth sizes the flexible name column from the terminal width, the sum
+// flexWidth sizes the flexible name column from the available width, the sum
 // of the fixed column widths, and the number of fixed columns (two spaces of
 // separator each).
-func (m Model) flexWidth(fixed, gaps int) int {
-	width := m.width - fixed - gaps*2
+func flexWidth(available, fixed, gaps int) int {
+	width := available - fixed - gaps*2
 	if width < 12 {
 		return 12
 	}
@@ -239,64 +517,39 @@ func (m Model) statusText(resource Resource) string {
 	return resource.Status
 }
 
-func (m Model) statusStyle(resource Resource) (lipgloss.Style, bool) {
-	if _, busy := m.inFlight[resource.ID]; busy {
-		return pendingStyle, true
-	}
-	if resource.Template {
-		return templateStyle, true
-	}
-	switch resource.Status {
-	case "running", "online", "available":
-		return runningStyle, true
-	case "stopped", "offline":
-		return faintStyle, true
-	case "paused", "suspended", "unknown":
-		return pendingStyle, true
-	default:
-		return lipgloss.Style{}, false
-	}
-}
-
-func (m Model) renderStatusLine() string {
-	parts := []string{}
-	if m.filtering || m.filter != "" {
-		indicator := "filter: /" + m.filter
-		if m.filtering {
-			indicator += "_"
-		}
-		parts = append(parts, indicator)
-	}
-	if m.status != "" {
-		message := m.status
-		if m.statusIsError {
-			message = errorStyle.Render(message)
-		}
-		parts = append(parts, message)
-	}
-	return strings.Join(parts, "  |  ")
-}
-
-func (m Model) renderHints() string {
-	var hints string
+// renderCrumbs draws the k9s breadcrumb chips with the flash message on the
+// right.
+func (m Model) renderCrumbs() string {
+	crumbs := []string{strings.ToLower(m.view.title())}
 	switch {
 	case m.confirm != nil:
-		hints = "y confirm · any other key cancel"
-	case m.details != nil, m.showHelp:
-		hints = "any key to close"
-	case m.filtering:
-		hints = "type to filter · enter apply · esc clear"
-	default:
-		hints = "j/k move · 1/2/3 view · / filter · enter details · s start · d shutdown · x stop · r reboot · R refresh · ? help · q quit"
+		crumbs = append(crumbs, "confirm")
+	case m.details != nil:
+		crumbs = append(crumbs, "describe")
+	case m.showHelp:
+		crumbs = append(crumbs, "help")
 	}
-	return faintStyle.Render(hints)
-}
-
-// renderOverlay centers a bordered panel in the table area (column header
-// plus body rows) so the surrounding chrome stays in place.
-func (m Model) renderOverlay(lines []string) string {
-	box := overlayStyle.Render(strings.Join(lines, "\n"))
-	return lipgloss.Place(m.width, m.pageSize()+1, lipgloss.Center, lipgloss.Center, box)
+	parts := make([]string, 0, len(crumbs))
+	for index, crumb := range crumbs {
+		style := crumbStyle
+		if index == len(crumbs)-1 {
+			style = crumbActiveStyle
+		}
+		parts = append(parts, style.Render(" <"+crumb+"> "))
+	}
+	line := " " + strings.Join(parts, " ")
+	if m.status != "" {
+		flash := flashInfoStyle
+		if m.statusIsError {
+			flash = flashErrorStyle
+		}
+		message := flash.Render(m.status)
+		gap := m.width - lipgloss.Width(line) - lipgloss.Width(message) - 1
+		if gap > 0 {
+			line += strings.Repeat(" ", gap) + message
+		}
+	}
+	return line
 }
 
 func (m Model) confirmLines() []string {
@@ -312,25 +565,25 @@ func (m Model) confirmLines() []string {
 		consequence = "The guest will be asked to power off cleanly."
 	}
 	return []string{
-		titleStyle.Render(fmt.Sprintf("Confirm %s", pending.action)),
 		"",
-		label,
-		consequence,
+		menuDescStyle.Render(fmt.Sprintf("Confirm %s of %s", pending.action, label)),
+		rowStyleError.Render(consequence),
 		"",
-		faintStyle.Render("Press y to confirm, any other key to cancel."),
+		dimStyle.Render("Press y to confirm, any other key to cancel."),
 	}
 }
 
 func (m Model) detailLines(resource Resource) []string {
-	lines := []string{titleStyle.Render(fmt.Sprintf("%s: %s", resource.Kind, resource.Name)), ""}
+	lines := []string{""}
 	add := func(label, value string) {
 		if value != "" && value != "-" {
-			lines = append(lines, fmt.Sprintf("%-12s %s", label, value))
+			lines = append(lines, describeKeyStyle.Render(pad(label, 12))+describeValueStyle.Render(value))
 		}
 	}
 	if resource.VMID > 0 {
 		add("VMID", fmt.Sprintf("%d", resource.VMID))
 	}
+	add("Name", resource.Name)
 	add("Node", resource.Node)
 	add("Status", m.statusText(resource))
 	add("HA state", resource.HAState)
@@ -354,29 +607,60 @@ func (m Model) detailLines(resource Resource) []string {
 		}
 		add("Shared", shared)
 	}
+	lines = append(lines, "", dimStyle.Render("Press any key to close."))
 	return lines
 }
 
 func helpLines() []string {
-	return []string{
-		titleStyle.Render("Keyboard reference"),
-		"",
-		"Navigation",
-		"  j/k, arrows    move selection",
-		"  g / G          jump to top / bottom",
-		"  pgup / pgdn    page up / down",
-		"  1 / 2 / 3      guests / nodes / storage view",
-		"  tab            cycle views",
-		"  /              filter (esc clears)",
-		"  enter          details for the selection",
-		"  R              refresh now",
-		"",
-		"Guest actions",
-		"  s              start",
-		"  d              shutdown (graceful, confirms)",
-		"  x              stop (hard, confirms)",
-		"  r              reboot (confirms)",
-		"",
-		"  q              quit",
+	entry := func(key, desc string) string {
+		return "  " + menuKeyStyle.Render(pad("<"+key+">", 9)) + menuDescStyle.Render(desc)
 	}
+	return []string{
+		"",
+		helpSectionStyle.Render("Navigation"),
+		entry("j/k", "move selection (arrows work too)"),
+		entry("g/G", "jump to top / bottom"),
+		entry("pgup/pgdn", "page up / down"),
+		entry("1/2/3", "guests / nodes / storage view"),
+		entry("tab", "cycle views"),
+		entry("/", "filter rows (esc clears)"),
+		entry(":", "command mode (guests, vm, lxc, nodes, storage, quit)"),
+		entry("enter", "describe the selection"),
+		entry("R", "refresh now"),
+		"",
+		helpSectionStyle.Render("Guest actions"),
+		entry("s", "start"),
+		entry("d", "shutdown (graceful, confirms)"),
+		entry("x", "stop (hard, confirms)"),
+		entry("r", "reboot (confirms)"),
+		"",
+		entry("q", "quit"),
+	}
+}
+
+// blockWidth is the widest visible line in a block.
+func blockWidth(lines []string) int {
+	width := 0
+	for _, line := range lines {
+		if w := lipgloss.Width(line); w > width {
+			width = w
+		}
+	}
+	return width
+}
+
+// blockLine returns line index of a block, or "" past its end.
+func blockLine(lines []string, index int) string {
+	if index < len(lines) {
+		return lines[index]
+	}
+	return ""
+}
+
+// padVisible right-pads a possibly styled string to width terminal cells.
+func padVisible(s string, width int) string {
+	if gap := width - lipgloss.Width(s); gap > 0 {
+		return s + strings.Repeat(" ", gap)
+	}
+	return s
 }

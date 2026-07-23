@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
+	"github.com/spf13/viper"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Adz-ai/proxmox-cli/internal/tui"
@@ -139,6 +140,81 @@ func TestTUIDataSourceVersion(t *testing.T) {
 func TestDisplayServerAndUser(t *testing.T) {
 	if got := displayServer("https://pve.example.com:8006/"); got != "pve.example.com:8006" {
 		t.Errorf("displayServer = %q", got)
+	}
+}
+
+func TestTUIDataSourceTasks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := mocks.NewMockProxmoxClientInterface(ctrl)
+	node := mocks.NewMockNodeInterface(ctrl)
+	client.EXPECT().Nodes(gomock.Any()).Return(proxmox.NodeStatuses{&proxmox.NodeStatus{Node: "pve1"}}, nil)
+	client.EXPECT().Node(gomock.Any(), "pve1").Return(node, nil)
+	node.EXPECT().Tasks(gomock.Any(), &proxmox.NodeTasksOptions{Limit: 100, Source: "all"}).Return([]*proxmox.Task{
+		{UPID: "UPID:pve1:1", ID: "110", Type: "vzdump", User: "root@pam", Node: "pve1", ExitStatus: "OK", StartTime: time.Unix(100, 0), EndTime: time.Unix(160, 0)},
+		{UPID: "UPID:pve1:2", ID: "109", Type: "qmstart", User: "root@pam", Node: "pve1", IsRunning: true, StartTime: time.Unix(200, 0)},
+	}, nil)
+
+	source := &tuiDataSource{client: client}
+	rows, err := source.Tasks(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(rows))
+	}
+	if rows[0].Kind != tui.KindTask || rows[0].Status != "OK" || rows[0].Target != "110" || rows[0].Start != 100 {
+		t.Fatalf("completed task mapped incorrectly: %+v", rows[0])
+	}
+	if rows[1].Status != "running" {
+		t.Fatalf("running task should report running, got %+v", rows[1])
+	}
+}
+
+func TestTUIDataSourceSnapshotsSkipCurrent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := mocks.NewMockProxmoxClientInterface(ctrl)
+	node := mocks.NewMockNodeInterface(ctrl)
+	vm := mocks.NewMockVirtualMachineInterface(ctrl)
+	client.EXPECT().Node(gomock.Any(), "pve1").Return(node, nil)
+	node.EXPECT().VirtualMachine(gomock.Any(), 100).Return(vm, nil)
+	vm.EXPECT().Snapshots(gomock.Any()).Return([]*proxmox.VirtualMachineSnapshot{
+		{Name: "pre-upgrade", Snaptime: 1700000000, Description: "before v2"},
+		{Name: "current", Description: "You are here!"},
+	}, nil)
+
+	source := &tuiDataSource{client: client}
+	items, err := source.Snapshots(context.Background(), tui.Resource{Kind: tui.KindVM, VMID: 100, Node: "pve1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Name != "pre-upgrade" || items[0].Created != 1700000000 {
+		t.Fatalf("snapshots mapped incorrectly: %+v", items)
+	}
+}
+
+func TestTUIDataSourceShellRequiresSessionTicket(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	setupResourcesMocks(t, ctrl)
+	viper.Set("auth_ticket.ticket", "")
+	viper.Set("auth_ticket.CSRFPreventionToken", "")
+	viper.Set("api_token.token_id", "root@pam!cli")
+	viper.Set("api_token.secret", "secret")
+
+	source := &tuiDataSource{client: mocks.NewMockProxmoxClientInterface(ctrl)}
+	guest := tui.Resource{Kind: tui.KindVM, VMID: 100, Node: "pve1"}
+	if _, err := source.Shell(guest); err == nil || !strings.Contains(err.Error(), "session login") {
+		t.Fatalf("token-only auth should refuse the console, got %v", err)
+	}
+
+	viper.Set("auth_ticket.ticket", "PVE:root@pam:aa")
+	viper.Set("auth_ticket.CSRFPreventionToken", "token")
+	session, err := source.Shell(guest)
+	if err != nil || session == nil {
+		t.Fatalf("session auth should return a console session, got %v", err)
+	}
+
+	if _, err := source.Shell(tui.Resource{Kind: tui.KindNode, Node: "pve1"}); err == nil {
+		t.Fatal("console must be refused for non-guests")
 	}
 }
 

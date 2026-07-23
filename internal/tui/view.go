@@ -81,6 +81,7 @@ var logoLines = []string{
 type column struct {
 	title string
 	width int
+	sort  string
 }
 
 func (m Model) View() string {
@@ -123,7 +124,7 @@ func (m Model) renderHeader() []string {
 	for index := range lines {
 		line := padVisible(blockLine(info, index), infoWidth)
 		if showMenu {
-			line += "    " + padVisible(blockLine(menu, index), menuWidth)
+			line += "  " + padVisible(blockLine(menu, index), menuWidth)
 		}
 		if showLogo {
 			gap := m.width - lipgloss.Width(line) - logoWidth - 1
@@ -206,23 +207,24 @@ func menuLines() []string {
 			{"1", "guests", true},
 			{"2", "nodes", true},
 			{"3", "storage", true},
+			{"4", "tasks", true},
 			{"/", "filter", false},
 			{":", "command", false},
-			{"enter", "details", false},
 		},
 		{
 			{"s", "start", false},
 			{"d", "shutdown", false},
 			{"x", "stop", false},
 			{"r", "reboot", false},
-			{"R", "refresh", false},
-			{"?", "help", false},
+			{"c", "console", false},
+			{"ctrl-d", "delete", false},
 		},
 		{
-			{"j/k", "move", false},
-			{"g/G", "jump", false},
-			{"tab", "cycle view", false},
-			{"esc", "clear", false},
+			{"t", "snapshots", false},
+			{"enter", "describe", false},
+			{"shft-x", "sort", false},
+			{"R", "refresh", false},
+			{"?", "help", false},
 			{"q", "quit", false},
 		},
 	}
@@ -231,7 +233,7 @@ func menuLines() []string {
 		parts := make([]string, 0, len(columns))
 		for _, col := range columns {
 			if row >= len(col) {
-				parts = append(parts, strings.Repeat(" ", 20))
+				parts = append(parts, strings.Repeat(" ", 19))
 				continue
 			}
 			hint := col[row]
@@ -239,7 +241,7 @@ func menuLines() []string {
 			if hint.numeric {
 				keyStyle = menuNumStyle
 			}
-			parts = append(parts, keyStyle.Render(pad("<"+hint.key+">", 8))+menuDescStyle.Render(pad(hint.desc, 12)))
+			parts = append(parts, keyStyle.Render(pad("<"+hint.key+">", 9))+menuDescStyle.Render(pad(hint.desc, 10)))
 		}
 		lines[row] = strings.Join(parts, "")
 	}
@@ -258,11 +260,44 @@ func (m Model) renderBody() []string {
 		return m.renderBox(m.confirmTitle(), m.confirmLines(), innerHeight)
 	case m.details != nil:
 		return m.renderBox(m.describeTitle(*m.details), m.detailLines(*m.details), innerHeight)
+	case m.snapshotsFor != nil:
+		return m.renderBox(m.snapshotsTitle(), m.snapshotLines(), innerHeight)
 	case m.showHelp:
 		return m.renderBox(boxTitle("Help", "", 0, false), helpLines(), innerHeight)
 	default:
 		return m.renderBox(m.tableTitle(), m.tableLines(), innerHeight)
 	}
+}
+
+func (m Model) snapshotsTitle() string {
+	resource := *m.snapshotsFor
+	scope := fmt.Sprintf("%s/%d", resource.Kind, resource.VMID)
+	return boxTitle("Snapshots", scope, len(m.snapshots), true)
+}
+
+func (m Model) snapshotLines() []string {
+	if m.snapshots == nil {
+		return []string{"", dimStyle.Render("Loading snapshots...")}
+	}
+	lines := []string{tableHeaderStyle.Render(pad("NAME", 24) + "  " + pad("CREATED", 20) + "  " + pad("PARENT", 24) + "  DESCRIPTION")}
+	for _, snapshot := range m.snapshots {
+		created := "-"
+		if snapshot.Created > 0 {
+			created = FormatUnixTime(snapshot.Created)
+		}
+		parent := snapshot.Parent
+		if parent == "" {
+			parent = "-"
+		}
+		description := strings.TrimSpace(snapshot.Description)
+		lines = append(lines, rowStyleDefault.Render(
+			pad(snapshot.Name, 24)+"  "+pad(created, 20)+"  "+pad(parent, 24)+"  "+description))
+	}
+	if len(m.snapshots) == 0 {
+		lines = append(lines, dimStyle.Render("No snapshots"))
+	}
+	lines = append(lines, "", dimStyle.Render("Press any key to close."))
+	return lines
 }
 
 // renderBox draws a k9s-style bordered panel with the title embedded in the
@@ -340,7 +375,15 @@ func (m Model) tableLines() []string {
 	columns := m.columns()
 	headerCells := make([]string, len(columns))
 	for index, col := range columns {
-		headerCells[index] = pad(col.title, col.width)
+		title := col.title
+		if col.sort != "" && col.sort == m.sortKey {
+			arrow := "↑"
+			if !m.sortAsc {
+				arrow = "↓"
+			}
+			title += arrow
+		}
+		headerCells[index] = pad(title, col.width)
 	}
 	lines := []string{tableHeaderStyle.Render(strings.Join(headerCells, "  "))}
 
@@ -372,7 +415,18 @@ func (m Model) tableLines() []string {
 }
 
 // rowStyle colors a whole row by guest state, like k9s status-based rows.
+// Completed tasks render dim so running tasks and failures stand out.
 func (m Model) rowStyle(resource Resource) lipgloss.Style {
+	if resource.Kind == KindTask {
+		switch resource.Status {
+		case "running":
+			return rowStylePending
+		case "OK":
+			return rowStyleStopped
+		default:
+			return rowStyleError
+		}
+	}
 	if _, busy := m.inFlight[resource.ID]; busy {
 		return rowStylePending
 	}
@@ -394,44 +448,54 @@ func (m Model) rowStyle(resource Resource) lipgloss.Style {
 }
 
 // columns returns the column layout for the active view, sized against the
-// box interior.
+// box interior. The sort field names the semantic sort key for the column.
 func (m Model) columns() []column {
 	inner := m.width - 4
 	switch m.view {
 	case viewNodes:
 		return []column{
-			{"NAME", flexWidth(inner, 63, 8)},
-			{"STATUS", 10},
-			{"CPU", 7},
-			{"CPUS", 5},
-			{"MEM", 10},
-			{"MAXMEM", 10},
-			{"MEM%", 6},
-			{"DISK%", 6},
-			{"UPTIME", 9},
+			{"NAME", flexWidth(inner, 63, 8), "name"},
+			{"STATUS", 10, "status"},
+			{"CPU", 7, "cpu"},
+			{"CPUS", 5, ""},
+			{"MEM", 10, "mem"},
+			{"MAXMEM", 10, ""},
+			{"MEM%", 6, ""},
+			{"DISK%", 6, "used"},
+			{"UPTIME", 9, "age"},
 		}
 	case viewStorage:
 		return []column{
-			{"NAME", flexWidth(inner, 64, 7)},
-			{"NODE", 12},
-			{"STATUS", 10},
-			{"TYPE", 10},
-			{"USED", 10},
-			{"TOTAL", 10},
-			{"USE%", 6},
-			{"SHARED", 6},
+			{"NAME", flexWidth(inner, 64, 7), "name"},
+			{"NODE", 12, "node"},
+			{"STATUS", 10, "status"},
+			{"TYPE", 10, ""},
+			{"USED", 10, "used"},
+			{"TOTAL", 10, "total"},
+			{"USE%", 6, ""},
+			{"SHARED", 6, ""},
+		}
+	case viewTasks:
+		return []column{
+			{"STARTED", 15, "start"},
+			{"TYPE", flexWidth(inner, 82, 6), "type"},
+			{"TARGET", 10, "target"},
+			{"NODE", 12, "node"},
+			{"USER", 18, "user"},
+			{"DURATION", 9, ""},
+			{"STATUS", 18, "status"},
 		}
 	default:
 		return []column{
-			{"KIND", 4},
-			{"VMID", 6},
-			{"NAME", flexWidth(inner, 66, 8)},
-			{"NODE", 12},
-			{"STATUS", 12},
-			{"CPU", 7},
-			{"MEM", 10},
-			{"MEM%", 6},
-			{"UPTIME", 9},
+			{"KIND", 4, ""},
+			{"VMID", 6, "id"},
+			{"NAME", flexWidth(inner, 66, 8), "name"},
+			{"NODE", 12, "node"},
+			{"STATUS", 12, "status"},
+			{"CPU", 7, "cpu"},
+			{"MEM", 10, "mem"},
+			{"MEM%", 6, ""},
+			{"UPTIME", 9, "age"},
 		}
 	}
 }
@@ -453,6 +517,20 @@ func flexWidth(available, fixed, gaps int) int {
 func (m Model) rowCells(resource Resource, columns []column) []string {
 	var values []string
 	switch m.view {
+	case viewTasks:
+		duration := "-"
+		if resource.End > resource.Start && resource.Start > 0 {
+			duration = FormatUptime(uint64(resource.End - resource.Start))
+		}
+		values = []string{
+			FormatUnixTime(resource.Start),
+			resource.Name,
+			resource.Target,
+			resource.Node,
+			resource.User,
+			duration,
+			resource.Status,
+		}
 	case viewNodes:
 		values = []string{
 			resource.Name,
@@ -526,6 +604,8 @@ func (m Model) renderCrumbs() string {
 		crumbs = append(crumbs, "confirm")
 	case m.details != nil:
 		crumbs = append(crumbs, "describe")
+	case m.snapshotsFor != nil:
+		crumbs = append(crumbs, "snapshots")
 	case m.showHelp:
 		crumbs = append(crumbs, "help")
 	}
@@ -580,6 +660,20 @@ func (m Model) detailLines(resource Resource) []string {
 			lines = append(lines, describeKeyStyle.Render(pad(label, 12))+describeValueStyle.Render(value))
 		}
 	}
+	if resource.Kind == KindTask {
+		add("UPID", resource.ID)
+		add("Type", resource.Name)
+		add("Target", resource.Target)
+		add("Node", resource.Node)
+		add("User", resource.User)
+		add("Status", resource.Status)
+		add("Started", FormatUnixTime(resource.Start))
+		if resource.End > resource.Start && resource.Start > 0 {
+			add("Duration", FormatUptime(uint64(resource.End-resource.Start)))
+		}
+		lines = append(lines, "", dimStyle.Render("Press any key to close."))
+		return lines
+	}
 	if resource.VMID > 0 {
 		add("VMID", fmt.Sprintf("%d", resource.VMID))
 	}
@@ -621,10 +715,11 @@ func helpLines() []string {
 		entry("j/k", "move selection (arrows work too)"),
 		entry("g/G", "jump to top / bottom"),
 		entry("pgup/pgdn", "page up / down"),
-		entry("1/2/3", "guests / nodes / storage view"),
+		entry("1/2/3/4", "guests / nodes / storage / tasks view"),
 		entry("tab", "cycle views"),
 		entry("/", "filter rows (esc clears)"),
-		entry(":", "command mode (guests, vm, lxc, nodes, storage, quit)"),
+		entry(":", "command mode (guests, vm, lxc, nodes, storage, tasks, quit)"),
+		entry("shift-x", "sort by column (I id, N name, O node, S status, C cpu, M mem, A age, U used, T total)"),
 		entry("enter", "describe the selection"),
 		entry("R", "refresh now"),
 		"",
@@ -633,6 +728,9 @@ func helpLines() []string {
 		entry("d", "shutdown (graceful, confirms)"),
 		entry("x", "stop (hard, confirms)"),
 		entry("r", "reboot (confirms)"),
+		entry("c", "console (interactive shell, Ctrl+] to exit)"),
+		entry("t", "snapshots"),
+		entry("ctrl-d", "delete (stopped guests, confirms)"),
 		"",
 		entry("q", "quit"),
 	}

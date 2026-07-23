@@ -1,8 +1,10 @@
 package utility
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -13,19 +15,25 @@ import (
 // until the user presses Ctrl+] or the connection closes. The caller's
 // closer is always invoked on return.
 func RunConsole(cmd *cobra.Command, send, recv chan []byte, errs chan error, closer func() error) error {
-	defer func() { _ = closer() }()
-	out := cmd.OutOrStdout()
+	return RunConsoleStreams(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout(), send, recv, errs, closer)
+}
 
-	stdin, ok := cmd.InOrStdin().(*os.File)
-	if !ok || !term.IsTerminal(int(stdin.Fd())) {
+// RunConsoleStreams is RunConsole against explicit streams so callers other
+// than cobra commands (the TUI) can attach a console. stdin must be an
+// interactive terminal.
+func RunConsoleStreams(ctx context.Context, stdin io.Reader, out io.Writer, send, recv chan []byte, errs chan error, closer func() error) error {
+	defer func() { _ = closer() }()
+
+	file, ok := stdin.(*os.File)
+	if !ok || !term.IsTerminal(int(file.Fd())) {
 		return errors.New("console requires an interactive terminal")
 	}
 
-	oldState, err := term.MakeRaw(int(stdin.Fd()))
+	oldState, err := term.MakeRaw(int(file.Fd()))
 	if err != nil {
 		return fmt.Errorf("switch terminal to raw mode: %w", err)
 	}
-	defer func() { _ = term.Restore(int(stdin.Fd()), oldState) }()
+	defer func() { _ = term.Restore(int(file.Fd()), oldState) }()
 
 	fmt.Fprint(out, "Connected. Press Ctrl+] to disconnect.\r\n")
 
@@ -34,7 +42,7 @@ func RunConsole(cmd *cobra.Command, send, recv chan []byte, errs chan error, clo
 		defer close(done)
 		buffer := make([]byte, 1024)
 		for {
-			n, err := stdin.Read(buffer)
+			n, err := file.Read(buffer)
 			if err != nil {
 				return
 			}
@@ -53,7 +61,6 @@ func RunConsole(cmd *cobra.Command, send, recv chan []byte, errs chan error, clo
 		}
 	}()
 
-	ctx := cmd.Context()
 	for {
 		select {
 		case <-ctx.Done():

@@ -1,6 +1,9 @@
 package tui
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // HumanBytes renders a byte count in binary units with one decimal place.
 func HumanBytes(bytes uint64) string {
@@ -39,6 +42,14 @@ func FormatUptime(seconds uint64) string {
 	default:
 		return fmt.Sprintf("%ds", seconds)
 	}
+}
+
+// FormatUnixTime renders a unix timestamp as a compact local time.
+func FormatUnixTime(unix int64) string {
+	if unix <= 0 {
+		return "-"
+	}
+	return time.Unix(unix, 0).Format("Jan 02 15:04:05")
 }
 
 // FormatPercent renders a 0..1 fraction as a percentage.

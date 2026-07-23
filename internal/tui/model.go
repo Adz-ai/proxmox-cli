@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ const (
 	viewGuests view = iota
 	viewNodes
 	viewStorage
+	viewTasks
 	viewCount
 )
 
@@ -27,6 +29,8 @@ func (v view) title() string {
 		return "Nodes"
 	case viewStorage:
 		return "Storage"
+	case viewTasks:
+		return "Tasks"
 	default:
 		return "Unknown"
 	}
@@ -40,6 +44,8 @@ func (v view) includes(kind Kind) bool {
 		return kind == KindNode
 	case viewStorage:
 		return kind == KindStorage
+	case viewTasks:
+		return kind == KindTask
 	default:
 		return false
 	}
@@ -52,6 +58,22 @@ type resourcesMsg struct {
 
 type versionMsg struct {
 	version string
+}
+
+type tasksMsg struct {
+	rows []Resource
+	err  error
+}
+
+type snapshotsMsg struct {
+	resource Resource
+	items    []Snapshot
+	err      error
+}
+
+type consoleDoneMsg struct {
+	resource Resource
+	err      error
 }
 
 type actionDoneMsg struct {
@@ -83,17 +105,22 @@ type Model struct {
 	view       view
 	kindFilter Kind
 	rows       []Resource
+	tasks      []Resource
 	cursor     int
 	offset     int
 	filter     string
 	filtering  bool
+	sortKey    string
+	sortAsc    bool
 
 	commandMode bool
 	command     string
 
-	confirm  *confirmState
-	details  *Resource
-	showHelp bool
+	confirm      *confirmState
+	details      *Resource
+	snapshotsFor *Resource
+	snapshots    []Snapshot
+	showHelp     bool
 
 	loading       bool
 	inFlight      map[string]Action
@@ -158,11 +185,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus(fmt.Sprintf("%s: %s", label, doneVerb(msg.action)), false)
 		m.loading = true
 		return m, m.fetchCmd()
+	case tasksMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("list tasks failed: %v", msg.err), true)
+			return m, nil
+		}
+		selected := m.selectedID()
+		m.tasks = msg.rows
+		m.restoreSelection(selected)
+		return m, nil
+	case snapshotsMsg:
+		if m.snapshotsFor == nil || m.snapshotsFor.ID != msg.resource.ID {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.snapshotsFor = nil
+			m.setStatus(fmt.Sprintf("list snapshots failed: %v", msg.err), true)
+			return m, nil
+		}
+		m.snapshots = msg.items
+		return m, nil
+	case consoleDoneMsg:
+		label := fmt.Sprintf("%s %d (%s)", msg.resource.Kind, msg.resource.VMID, msg.resource.Name)
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("console %s failed: %v", label, msg.err), true)
+		} else {
+			m.setStatus(fmt.Sprintf("console %s ended", label), false)
+		}
+		m.loading = true
+		return m, m.fetchCmd()
 	case tickMsg:
 		cmds := []tea.Cmd{m.tickCmd()}
 		if !m.loading {
 			m.loading = true
 			cmds = append(cmds, m.fetchCmd())
+			if m.view == viewTasks {
+				cmds = append(cmds, m.tasksCmd())
+			}
 		}
 		return m, tea.Batch(cmds...)
 	case tea.KeyMsg:
@@ -189,6 +249,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.details = nil
 		return m, nil
 	}
+	if m.snapshotsFor != nil {
+		m.snapshotsFor = nil
+		m.snapshots = nil
+		return m, nil
+	}
 	if m.showHelp {
 		m.showHelp = false
 		return m, nil
@@ -199,6 +264,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.commandMode {
 		return m.handleCommandKey(msg)
 	}
+	if target, ok := m.sortTargets()[key]; ok {
+		if m.sortKey == target {
+			m.sortAsc = !m.sortAsc
+		} else {
+			m.sortKey = target
+			m.sortAsc = true
+		}
+		m.clampCursor()
+		return m, nil
+	}
 	switch key {
 	case "q":
 		return m, tea.Quit
@@ -208,8 +283,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.switchView(viewNodes)
 	case "3":
 		m.switchView(viewStorage)
+	case "4":
+		return m.openTasksView()
 	case "tab":
-		m.switchView((m.view + 1) % viewCount)
+		if next := (m.view + 1) % viewCount; next == viewTasks {
+			return m.openTasksView()
+		} else {
+			m.switchView(next)
+		}
 	case "up", "k":
 		m.moveCursor(-1)
 	case "down", "j":
@@ -253,9 +334,98 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.requestAction(ActionStop)
 	case "r":
 		return m.requestAction(ActionReboot)
+	case "ctrl+d":
+		return m.requestAction(ActionDelete)
+	case "c":
+		return m.openConsole()
+	case "t":
+		return m.openSnapshots()
 	}
 	return m, nil
 }
+
+// sortTargets maps shift-key presses to sortable columns for the active
+// view, k9s style.
+func (m *Model) sortTargets() map[string]string {
+	switch m.view {
+	case viewNodes:
+		return map[string]string{"N": "name", "S": "status", "C": "cpu", "M": "mem", "U": "used", "A": "age"}
+	case viewStorage:
+		return map[string]string{"N": "name", "O": "node", "S": "status", "U": "used", "T": "total"}
+	case viewTasks:
+		return map[string]string{"A": "start", "O": "node", "T": "type", "I": "target", "U": "user", "S": "status"}
+	default:
+		return map[string]string{"I": "id", "N": "name", "O": "node", "S": "status", "C": "cpu", "M": "mem", "A": "age"}
+	}
+}
+
+func (m Model) openTasksView() (tea.Model, tea.Cmd) {
+	if m.view == viewTasks {
+		return m, nil
+	}
+	m.switchView(viewTasks)
+	m.loading = true
+	return m, m.tasksCmd()
+}
+
+func (m Model) openConsole() (tea.Model, tea.Cmd) {
+	resource, ok := m.selectedResource()
+	if !ok {
+		return m, nil
+	}
+	if resource.Kind != KindVM && resource.Kind != KindLXC {
+		m.setStatus("console is only available for VMs and containers", true)
+		return m, nil
+	}
+	if resource.Template {
+		m.setStatus("templates do not have a console", true)
+		return m, nil
+	}
+	session, err := m.source.Shell(resource)
+	if err != nil {
+		m.setStatus(err.Error(), true)
+		return m, nil
+	}
+	m.setStatus(fmt.Sprintf("console %s %d: press Ctrl+] to disconnect", resource.Kind, resource.VMID), false)
+	return m, tea.Exec(&sessionExec{session: session}, func(err error) tea.Msg {
+		return consoleDoneMsg{resource: resource, err: err}
+	})
+}
+
+func (m Model) openSnapshots() (tea.Model, tea.Cmd) {
+	resource, ok := m.selectedResource()
+	if !ok {
+		return m, nil
+	}
+	if resource.Kind != KindVM && resource.Kind != KindLXC {
+		m.setStatus("snapshots are only available for VMs and containers", true)
+		return m, nil
+	}
+	m.snapshotsFor = &resource
+	m.snapshots = nil
+	source := m.source
+	return m, func() tea.Msg {
+		items, err := source.Snapshots(context.Background(), resource)
+		return snapshotsMsg{resource: resource, items: items, err: err}
+	}
+}
+
+// sessionExec adapts a ShellSession to bubbletea's ExecCommand so the TUI
+// can release the terminal, run the console, and resume afterwards.
+type sessionExec struct {
+	session ShellSession
+	stdin   io.Reader
+	stdout  io.Writer
+	stderr  io.Writer
+}
+
+func (e *sessionExec) Run() error {
+	return e.session(e.stdin, e.stdout, e.stderr)
+}
+
+func (e *sessionExec) SetStdin(r io.Reader)  { e.stdin = r }
+func (e *sessionExec) SetStdout(w io.Writer) { e.stdout = w }
+func (e *sessionExec) SetStderr(w io.Writer) { e.stderr = w }
 
 func (m Model) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -323,6 +493,8 @@ func (m Model) executeCommand(command string) (tea.Model, tea.Cmd) {
 		m.switchView(viewNodes)
 	case "storage", "st", "sto":
 		m.switchView(viewStorage)
+	case "tasks", "task", "ta":
+		return m.openTasksView()
 	case "help", "h":
 		m.showHelp = true
 	default:
@@ -348,6 +520,10 @@ func (m Model) requestAction(action Action) (tea.Model, tea.Cmd) {
 		m.setStatus(fmt.Sprintf("%s %d already has a %s in progress", resource.Kind, resource.VMID, pending), true)
 		return m, nil
 	}
+	if action == ActionDelete && resource.Status == "running" {
+		m.setStatus(fmt.Sprintf("%s %d is running; stop it before deleting", resource.Kind, resource.VMID), true)
+		return m, nil
+	}
 	if action == ActionStart {
 		return m.startAction(resource, action)
 	}
@@ -370,6 +546,14 @@ func (m Model) fetchCmd() tea.Cmd {
 	return func() tea.Msg {
 		rows, err := source.Resources(context.Background())
 		return resourcesMsg{rows: rows, err: err}
+	}
+}
+
+func (m Model) tasksCmd() tea.Cmd {
+	source := m.source
+	return func() tea.Msg {
+		rows, err := source.Tasks(context.Background())
+		return tasksMsg{rows: rows, err: err}
 	}
 }
 
@@ -406,6 +590,8 @@ func (m *Model) switchView(target view) {
 	m.filter = ""
 	m.filtering = false
 	m.kindFilter = ""
+	m.sortKey = ""
+	m.sortAsc = true
 }
 
 func (m *Model) moveCursor(delta int) {
@@ -449,8 +635,12 @@ func (m *Model) pageSize() int {
 }
 
 func (m *Model) visibleRows() []Resource {
-	rows := make([]Resource, 0, len(m.rows))
-	for _, resource := range m.rows {
+	base := m.rows
+	if m.view == viewTasks {
+		base = m.tasks
+	}
+	rows := make([]Resource, 0, len(base))
+	for _, resource := range base {
 		if !m.view.includes(resource.Kind) {
 			continue
 		}
@@ -462,7 +652,59 @@ func (m *Model) visibleRows() []Resource {
 		}
 		rows = append(rows, resource)
 	}
+	m.sortVisible(rows)
 	return rows
+}
+
+// sortVisible orders rows by the active sort column. Tasks default to most
+// recent first.
+func (m *Model) sortVisible(rows []Resource) {
+	key, ascending := m.sortKey, m.sortAsc
+	if key == "" {
+		if m.view != viewTasks {
+			return
+		}
+		key, ascending = "start", false
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if ascending {
+			return lessBy(key, rows[i], rows[j])
+		}
+		return lessBy(key, rows[j], rows[i])
+	})
+}
+
+func lessBy(key string, a, b Resource) bool {
+	switch key {
+	case "id":
+		return a.VMID < b.VMID
+	case "name":
+		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+	case "node":
+		return a.Node < b.Node
+	case "status":
+		return a.Status < b.Status
+	case "cpu":
+		return a.CPU < b.CPU
+	case "mem":
+		return a.Mem < b.Mem
+	case "age":
+		return a.Uptime < b.Uptime
+	case "used":
+		return a.Disk < b.Disk
+	case "total":
+		return a.MaxDisk < b.MaxDisk
+	case "start":
+		return a.Start < b.Start
+	case "type":
+		return a.Name < b.Name
+	case "target":
+		return a.Target < b.Target
+	case "user":
+		return a.User < b.User
+	default:
+		return false
+	}
 }
 
 func (m *Model) selectedResource() (Resource, bool) {
@@ -504,6 +746,8 @@ func matchesFilter(resource Resource, filter string) bool {
 		resource.Node,
 		resource.Status,
 		resource.Tags,
+		resource.Target,
+		resource.User,
 	}, " "))
 	return strings.Contains(haystack, needle)
 }
@@ -550,6 +794,8 @@ func progressVerb(action Action) string {
 		return "stopping"
 	case ActionReboot:
 		return "rebooting"
+	case ActionDelete:
+		return "deleting"
 	default:
 		return string(action)
 	}
@@ -565,6 +811,8 @@ func doneVerb(action Action) string {
 		return "stopped"
 	case ActionReboot:
 		return "rebooted"
+	case ActionDelete:
+		return "deleted"
 	default:
 		return string(action) + " completed"
 	}

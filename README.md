@@ -124,16 +124,21 @@ proxmox-cli tui --refresh 10s       # Slower auto-refresh (default 5s)
 
 The TUI is styled after k9s: a header with cluster info (context, server,
 user, PVE version, aggregate CPU/MEM), keyboard hints, and live-refreshing
-views of guests, nodes, and storage in a bordered table with breadcrumbs.
+views of guests, nodes, storage, and tasks in a bordered table with
+breadcrumbs.
 
 | Key | Action |
 |-----|--------|
-| `1` / `2` / `3`, `tab` | Switch between guests, nodes, and storage views |
-| `:` | Command mode (`guests`, `vm`, `lxc`, `nodes`, `storage`, `help`, `quit`) |
+| `1` / `2` / `3` / `4`, `tab` | Switch between guests, nodes, storage, and tasks views |
+| `:` | Command mode (`guests`, `vm`, `lxc`, `nodes`, `storage`, `tasks`, `help`, `quit`) |
 | `j`/`k`, arrows, `g`/`G`, page keys | Move the selection |
 | `/` | Filter rows (`esc` clears) |
+| shift-key | Sort by column (`I` id, `N` name, `O` node, `S` status, `C` cpu, `M` mem, `A` age, `U` used, `T` total); same key inverts |
 | `enter` | Describe the selected row |
 | `s` / `d` / `x` / `r` | Start / shutdown / stop / reboot the selected guest |
+| `c` | Interactive console on the selected guest (`Ctrl+]` to exit; requires session login) |
+| `t` | Browse the selected guest's snapshots |
+| `ctrl+d` | Delete the selected guest (stopped guests only, confirms) |
 | `R` | Refresh immediately |
 | `?` | Keyboard reference |
 | `q` | Quit |

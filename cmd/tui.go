@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -146,6 +147,149 @@ func (d *tuiDataSource) Version(ctx context.Context) (string, error) {
 	return version.Version, nil
 }
 
+// Tasks aggregates recent tasks from every node in the cluster.
+func (d *tuiDataSource) Tasks(ctx context.Context) ([]tui.Resource, error) {
+	statuses, err := d.client.Nodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+	rows := []tui.Resource{}
+	for _, status := range statuses {
+		node, err := d.client.Node(ctx, status.Node)
+		if err != nil {
+			return nil, fmt.Errorf("get node %q: %w", status.Node, err)
+		}
+		tasks, err := node.Tasks(ctx, &proxmox.NodeTasksOptions{Limit: 100, Source: "all"})
+		if err != nil {
+			return nil, fmt.Errorf("list tasks on node %q: %w", status.Node, err)
+		}
+		for _, task := range tasks {
+			taskStatus := task.Status
+			if task.IsRunning {
+				taskStatus = "running"
+			} else if task.ExitStatus != "" {
+				taskStatus = task.ExitStatus
+			}
+			rows = append(rows, tui.Resource{
+				Kind:   tui.KindTask,
+				ID:     string(task.UPID),
+				Name:   task.Type,
+				Target: task.ID,
+				Node:   task.Node,
+				User:   task.User,
+				Status: taskStatus,
+				Start:  task.StartTime.Unix(),
+				End:    task.EndTime.Unix(),
+			})
+		}
+	}
+	return rows, nil
+}
+
+// Snapshots lists a guest's snapshots, skipping the synthetic "current"
+// entry Proxmox appends to represent the live state.
+func (d *tuiDataSource) Snapshots(ctx context.Context, resource tui.Resource) ([]tui.Snapshot, error) {
+	node, err := d.client.Node(ctx, resource.Node)
+	if err != nil {
+		return nil, fmt.Errorf("get node %q: %w", resource.Node, err)
+	}
+	items := []tui.Snapshot{}
+	switch resource.Kind {
+	case tui.KindVM:
+		vm, err := node.VirtualMachine(ctx, int(resource.VMID))
+		if err != nil {
+			return nil, fmt.Errorf("get VM %d: %w", resource.VMID, err)
+		}
+		snapshots, err := vm.Snapshots(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list snapshots for VM %d: %w", resource.VMID, err)
+		}
+		for _, snapshot := range snapshots {
+			if snapshot.Name == "current" {
+				continue
+			}
+			items = append(items, tui.Snapshot{
+				Name:        snapshot.Name,
+				Parent:      snapshot.Parent,
+				Description: snapshot.Description,
+				Created:     snapshot.Snaptime,
+			})
+		}
+	case tui.KindLXC:
+		container, err := node.Container(ctx, int(resource.VMID))
+		if err != nil {
+			return nil, fmt.Errorf("get container %d: %w", resource.VMID, err)
+		}
+		snapshots, err := container.Snapshots(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list snapshots for container %d: %w", resource.VMID, err)
+		}
+		for _, snapshot := range snapshots {
+			if snapshot.Name == "current" {
+				continue
+			}
+			items = append(items, tui.Snapshot{
+				Name:        snapshot.Name,
+				Parent:      snapshot.Parent,
+				Description: snapshot.Description,
+				Created:     snapshot.SnapshotCreationTime,
+			})
+		}
+	default:
+		return nil, fmt.Errorf("snapshots are only supported for VMs and containers")
+	}
+	return items, nil
+}
+
+// Shell attaches an interactive console to a guest. Proxmox rejects
+// websocket connections authenticated with API tokens, so a session ticket
+// is required.
+func (d *tuiDataSource) Shell(resource tui.Resource) (tui.ShellSession, error) {
+	if resource.Kind != tui.KindVM && resource.Kind != tui.KindLXC {
+		return nil, errors.New("console is only available for VMs and containers")
+	}
+	if !utility.HasSessionTicket() {
+		return nil, errors.New("console requires session login: run 'proxmox-cli auth login'")
+	}
+	client := d.client
+	return func(stdin io.Reader, stdout, stderr io.Writer) error {
+		ctx := context.Background()
+		node, err := client.Node(ctx, resource.Node)
+		if err != nil {
+			return fmt.Errorf("get node %q: %w", resource.Node, err)
+		}
+		var send, recv chan []byte
+		var errs chan error
+		var closer func() error
+		switch resource.Kind {
+		case tui.KindVM:
+			vm, vmErr := node.VirtualMachine(ctx, int(resource.VMID))
+			if vmErr != nil {
+				return fmt.Errorf("get VM %d: %w", resource.VMID, vmErr)
+			}
+			term, termErr := vm.TermProxy(ctx)
+			if termErr != nil {
+				return fmt.Errorf("open terminal proxy: %w", termErr)
+			}
+			send, recv, errs, closer, err = vm.TermWebSocket(term)
+		default:
+			container, ctErr := node.Container(ctx, int(resource.VMID))
+			if ctErr != nil {
+				return fmt.Errorf("get container %d: %w", resource.VMID, ctErr)
+			}
+			term, termErr := container.TermProxy(ctx)
+			if termErr != nil {
+				return fmt.Errorf("open terminal proxy: %w", termErr)
+			}
+			send, recv, errs, closer, err = container.TermWebSocket(term)
+		}
+		if err != nil {
+			return fmt.Errorf("open console websocket: %w", err)
+		}
+		return utility.RunConsoleStreams(ctx, stdin, stdout, send, recv, errs, closer)
+	}, nil
+}
+
 func (d *tuiDataSource) Guest(ctx context.Context, resource tui.Resource, action tui.Action) error {
 	node, err := d.client.Node(ctx, resource.Node)
 	if err != nil {
@@ -184,6 +328,8 @@ func vmTaskForAction(ctx context.Context, vm interfaces.VirtualMachineInterface,
 		return vm.Stop(ctx)
 	case tui.ActionReboot:
 		return vm.Reboot(ctx)
+	case tui.ActionDelete:
+		return vm.Delete(ctx, nil)
 	default:
 		return nil, fmt.Errorf("unsupported action %q", action)
 	}
@@ -199,6 +345,8 @@ func containerTaskForAction(ctx context.Context, container interfaces.ContainerI
 		return container.Stop(ctx)
 	case tui.ActionReboot:
 		return container.Reboot(ctx)
+	case tui.ActionDelete:
+		return container.Delete(ctx, nil)
 	default:
 		return nil, fmt.Errorf("unsupported action %q", action)
 	}

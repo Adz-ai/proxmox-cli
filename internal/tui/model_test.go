@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -14,9 +15,13 @@ import (
 type fakeSource struct {
 	mu        sync.Mutex
 	rows      []Resource
+	tasks     []Resource
+	snaps     []Snapshot
 	err       error
 	actions   []string
 	actionErr error
+	shellErr  error
+	shellRan  bool
 }
 
 func (f *fakeSource) Resources(ctx context.Context) ([]Resource, error) {
@@ -34,6 +39,30 @@ func (f *fakeSource) Guest(ctx context.Context, resource Resource, action Action
 
 func (f *fakeSource) Version(ctx context.Context) (string, error) {
 	return "8.4.1", nil
+}
+
+func (f *fakeSource) Tasks(ctx context.Context) ([]Resource, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.tasks, nil
+}
+
+func (f *fakeSource) Snapshots(ctx context.Context, resource Resource) ([]Snapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.snaps, nil
+}
+
+func (f *fakeSource) Shell(resource Resource) (ShellSession, error) {
+	if f.shellErr != nil {
+		return nil, f.shellErr
+	}
+	return func(stdin io.Reader, stdout, stderr io.Writer) error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.shellRan = true
+		return nil
+	}, nil
 }
 
 func (f *fakeSource) recorded() []string {
@@ -106,7 +135,11 @@ func TestViewSwitchingFiltersRowsByKind(t *testing.T) {
 		t.Fatalf("storage view rows = %+v", rows)
 	}
 	model, _ = press(t, model, "tab")
-	if len(model.visibleRows()) != 2 {
+	if model.view != viewTasks {
+		t.Fatal("tab from storage should reach the tasks view")
+	}
+	model, _ = press(t, model, "tab")
+	if model.view != viewGuests || len(model.visibleRows()) != 2 {
 		t.Fatal("tab should cycle back to the guests view")
 	}
 }
@@ -265,6 +298,120 @@ func TestViewRendersTableAndOverlays(t *testing.T) {
 	model, _ = press(t, model, "esc", "x")
 	if !strings.Contains(model.View(), "Confirm stop") {
 		t.Errorf("confirm overlay should render:\n%s", model.View())
+	}
+}
+
+func TestSortingByColumn(t *testing.T) {
+	model, _ := newTestModel(t, fixtureRows())
+	names := func() []string {
+		rows := model.visibleRows()
+		out := make([]string, len(rows))
+		for i, r := range rows {
+			out[i] = r.Name
+		}
+		return out
+	}
+	if got := names(); got[0] != "web" || got[1] != "db" {
+		t.Fatalf("default order should be VMID asc, got %v", got)
+	}
+	model, _ = press(t, model, "N")
+	if got := names(); got[0] != "db" || got[1] != "web" {
+		t.Fatalf("N should sort by name asc, got %v", got)
+	}
+	model, _ = press(t, model, "N")
+	if got := names(); got[0] != "web" || got[1] != "db" {
+		t.Fatalf("N again should invert to desc, got %v", got)
+	}
+	model, _ = press(t, model, "2")
+	if model.sortKey != "" {
+		t.Fatal("switching views should reset the sort")
+	}
+}
+
+func TestTasksView(t *testing.T) {
+	model, source := newTestModel(t, fixtureRows())
+	source.tasks = []Resource{
+		{Kind: KindTask, ID: "UPID:pve1:1", Name: "vzdump", Target: "100", Node: "pve1", User: "root@pam", Status: "OK", Start: 100, End: 160},
+		{Kind: KindTask, ID: "UPID:pve1:2", Name: "qmstart", Target: "100", Node: "pve1", User: "root@pam", Status: "running", Start: 200},
+	}
+	model, cmd := press(t, model, "4")
+	if cmd == nil {
+		t.Fatal("opening the tasks view should trigger a fetch")
+	}
+	next, _ := model.Update(cmd())
+	model = next.(Model)
+	rows := model.visibleRows()
+	if len(rows) != 2 || rows[0].ID != "UPID:pve1:2" {
+		t.Fatalf("tasks should list most recent first, got %+v", rows)
+	}
+	if !strings.Contains(model.View(), "vzdump") {
+		t.Error("tasks view should render task types")
+	}
+}
+
+func TestConsoleGuards(t *testing.T) {
+	model, source := newTestModel(t, fixtureRows())
+	source.shellErr = errors.New("console requires session login")
+	model, cmd := press(t, model, "c")
+	if cmd != nil || !model.statusIsError || !strings.Contains(model.status, "session login") {
+		t.Fatalf("shell error should flash, got %q", model.status)
+	}
+
+	source.shellErr = nil
+	_, cmd = press(t, model, "c")
+	if cmd == nil {
+		t.Fatal("console should return an exec command")
+	}
+
+	model, _ = press(t, model, "2")
+	model, cmd = press(t, model, "c")
+	if cmd != nil || !model.statusIsError {
+		t.Fatal("console must not open on node rows")
+	}
+}
+
+func TestDeleteRequiresStoppedGuestAndConfirmation(t *testing.T) {
+	model, source := newTestModel(t, fixtureRows())
+	ctrlD := tea.KeyMsg{Type: tea.KeyCtrlD}
+
+	next, cmd := model.Update(ctrlD)
+	model = next.(Model)
+	if cmd != nil || model.confirm != nil || !model.statusIsError {
+		t.Fatalf("delete on a running guest should be refused, got %q", model.status)
+	}
+
+	model, _ = press(t, model, "j")
+	next, _ = model.Update(ctrlD)
+	model = next.(Model)
+	if model.confirm == nil || model.confirm.action != ActionDelete {
+		t.Fatal("delete on a stopped guest should ask for confirmation")
+	}
+	_, cmd = press(t, model, "y")
+	if cmd == nil {
+		t.Fatal("confirming delete should return an action command")
+	}
+	cmd()
+	if got := source.recorded(); len(got) != 1 || got[0] != "delete lxc/200" {
+		t.Fatalf("recorded actions = %v", got)
+	}
+}
+
+func TestSnapshotsOverlay(t *testing.T) {
+	model, source := newTestModel(t, fixtureRows())
+	source.snaps = []Snapshot{{Name: "pre-upgrade", Created: 1700000000, Description: "before v2"}}
+	model, cmd := press(t, model, "t")
+	if cmd == nil || model.snapshotsFor == nil {
+		t.Fatal("t should open the snapshots overlay")
+	}
+	next, _ := model.Update(cmd())
+	model = next.(Model)
+	output := model.View()
+	if !strings.Contains(output, "pre-upgrade") || !strings.Contains(output, "<snapshots>") {
+		t.Errorf("snapshots overlay should render:\n%s", output)
+	}
+	model, _ = press(t, model, "q")
+	if model.snapshotsFor != nil {
+		t.Fatal("any key should close the snapshots overlay")
 	}
 }
 

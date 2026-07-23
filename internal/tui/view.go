@@ -623,10 +623,15 @@ func (m Model) renderCrumbs() string {
 		if m.statusIsError {
 			flash = flashErrorStyle
 		}
-		message := flash.Render(m.status)
-		gap := m.width - lipgloss.Width(line) - lipgloss.Width(message) - 1
-		if gap > 0 {
-			line += strings.Repeat(" ", gap) + message
+		// Truncate long messages rather than dropping them so errors
+		// always surface.
+		available := m.width - lipgloss.Width(line) - 2
+		if available > 8 {
+			message := flash.Render(truncate(m.status, available))
+			gap := m.width - lipgloss.Width(line) - lipgloss.Width(message) - 1
+			if gap > 0 {
+				line += strings.Repeat(" ", gap) + message
+			}
 		}
 	}
 	return line

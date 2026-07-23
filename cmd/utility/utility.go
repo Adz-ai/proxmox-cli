@@ -485,6 +485,41 @@ func AuthenticatedClient() (interfaces.ProxmoxClientInterface, error) {
 	return GetClient()
 }
 
+// SessionClient returns a client authenticated with the session ticket only.
+// Proxmox rejects API-token authentication on console websockets, and the
+// regular client prefers the token whenever both credentials are stored, so
+// console paths must use this client instead.
+func SessionClient() (interfaces.ProxmoxClientInterface, error) {
+	if !HasSessionTicket() {
+		return nil, errors.New("console requires a session ticket; run 'proxmox-cli auth login -u <username>' (API tokens cannot open websockets)")
+	}
+
+	clientFactoryMu.RLock()
+	factory := clientFactory
+	clientFactoryMu.RUnlock()
+	if factory != nil {
+		return factory(), nil
+	}
+
+	endpoint := ContextString("server_url")
+	if endpoint == "" {
+		return nil, errors.New("server URL is not configured")
+	}
+	normalizedEndpoint, err := NormalizeServerURL(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	httpClient, err := NewHTTPClient(ContextBool("insecure"), ContextString("ca_cert"))
+	if err != nil {
+		return nil, err
+	}
+
+	realClient := proxmox.NewClient(normalizedEndpoint+"/api2/json",
+		proxmox.WithHTTPClient(httpClient),
+		proxmox.WithSession(ContextString("auth_ticket.ticket"), ContextString("auth_ticket.CSRFPreventionToken")))
+	return &RealProxmoxClient{client: realClient}, nil
+}
+
 // SetClientFactory sets a factory function for creating clients (used by tests)
 func SetClientFactory(factory func() interfaces.ProxmoxClientInterface) {
 	clientFactoryMu.Lock()
@@ -531,7 +566,15 @@ func NewHTTPClient(insecure bool, caCertPath string) (*http.Client, error) {
 		return nil, errors.New("default HTTP transport has an unexpected type")
 	}
 	transport = transport.Clone()
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: insecure}
+	// Pin the connection to HTTP/1.1: with the default ForceAttemptHTTP2,
+	// net/http adds "h2" to this shared tls.Config, and the console
+	// websocket dialer (which reuses it) cannot upgrade over HTTP/2.
+	transport.ForceAttemptHTTP2 = false
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: insecure,
+		NextProtos:         []string{"http/1.1"},
+	}
 	if caCertPath != "" {
 		pem, err := os.ReadFile(caCertPath)
 		if err != nil {

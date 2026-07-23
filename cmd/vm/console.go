@@ -18,13 +18,24 @@ tokens to open console websockets. Press Ctrl+] to disconnect.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			if !utility.HasSessionTicket() {
-				return fmt.Errorf("console requires a session ticket; run 'proxmox-cli auth login -u <username>' (API tokens cannot open websockets)")
-			}
-
-			vm, id, err := vmFromFlags(cmd)
+			node, id, err := vmTargetFromFlags(cmd)
 			if err != nil {
 				return err
+			}
+
+			// The regular client prefers API-token auth, which Proxmox
+			// rejects for console websockets; use the session-only client.
+			client, err := utility.SessionClient()
+			if err != nil {
+				return err
+			}
+			retrievedNode, err := client.Node(ctx, node)
+			if err != nil {
+				return fmt.Errorf("get node %q: %w", node, err)
+			}
+			vm, err := retrievedNode.VirtualMachine(ctx, id)
+			if err != nil {
+				return fmt.Errorf("get VM %d: %w", id, err)
 			}
 
 			term, err := vm.TermProxy(ctx)

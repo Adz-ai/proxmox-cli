@@ -242,16 +242,19 @@ func (d *tuiDataSource) Snapshots(ctx context.Context, resource tui.Resource) ([
 }
 
 // Shell attaches an interactive console to a guest. Proxmox rejects
-// websocket connections authenticated with API tokens, so a session ticket
-// is required.
+// websocket connections authenticated with API tokens, so this goes through
+// a session-ticket-only client regardless of how the TUI itself connected.
 func (d *tuiDataSource) Shell(resource tui.Resource) (tui.ShellSession, error) {
 	if resource.Kind != tui.KindVM && resource.Kind != tui.KindLXC {
 		return nil, errors.New("console is only available for VMs and containers")
 	}
-	if !utility.HasSessionTicket() {
-		return nil, errors.New("console requires session login: run 'proxmox-cli auth login'")
+	// Re-read the config so a login done in another terminal while the TUI
+	// is running is picked up; a failed read surfaces via SessionClient.
+	_ = utility.LoadConfig()
+	client, err := utility.SessionClient()
+	if err != nil {
+		return nil, err
 	}
-	client := d.client
 	return func(stdin io.Reader, stdout, stderr io.Writer) error {
 		ctx := context.Background()
 		node, err := client.Node(ctx, resource.Node)

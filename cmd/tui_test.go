@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/mock/gomock"
 
+	"github.com/Adz-ai/proxmox-cli/cmd/utility"
 	"github.com/Adz-ai/proxmox-cli/internal/tui"
 	"github.com/Adz-ai/proxmox-cli/test/mocks"
 )
@@ -195,19 +196,27 @@ func TestTUIDataSourceSnapshotsSkipCurrent(t *testing.T) {
 func TestTUIDataSourceShellRequiresSessionTicket(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	setupResourcesMocks(t, ctrl)
+
+	// Shell reloads the config from disk, so persist each credential state.
 	viper.Set("auth_ticket.ticket", "")
 	viper.Set("auth_ticket.CSRFPreventionToken", "")
 	viper.Set("api_token.token_id", "root@pam!cli")
 	viper.Set("api_token.secret", "secret")
+	if err := utility.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
 
 	source := &tuiDataSource{client: mocks.NewMockProxmoxClientInterface(ctrl)}
 	guest := tui.Resource{Kind: tui.KindVM, VMID: 100, Node: "pve1"}
-	if _, err := source.Shell(guest); err == nil || !strings.Contains(err.Error(), "session login") {
+	if _, err := source.Shell(guest); err == nil || !strings.Contains(err.Error(), "API tokens cannot open websockets") {
 		t.Fatalf("token-only auth should refuse the console, got %v", err)
 	}
 
 	viper.Set("auth_ticket.ticket", "PVE:root@pam:aa")
 	viper.Set("auth_ticket.CSRFPreventionToken", "token")
+	if err := utility.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
 	session, err := source.Shell(guest)
 	if err != nil || session == nil {
 		t.Fatalf("session auth should return a console session, got %v", err)

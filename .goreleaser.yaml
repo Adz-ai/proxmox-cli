@@ -72,6 +72,14 @@ homebrew_casks:
     license: MIT
     # Publish the cask only when the tap token secret is configured.
     skip_upload: '{{ if .Env.HOMEBREW_TAP_GITHUB_TOKEN }}false{{ else }}true{{ end }}'
+    # The binaries are ad-hoc signed, not notarized; strip the quarantine
+    # attribute or macOS kills them on launch.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/proxmox-cli"]
+          end
     caveats: |
       Shell completions can be generated with:
         proxmox-cli completion bash|zsh|fish

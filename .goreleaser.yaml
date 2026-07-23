@@ -1,0 +1,81 @@
+version: 2
+
+project_name: proxmox-cli
+
+builds:
+  - main: .
+    binary: proxmox-cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat(\(.*\))?:'
+      order: 0
+    - title: Bug fixes
+      regexp: '^fix(\(.*\))?:'
+      order: 1
+    - title: Other changes
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore(\\(deps\\))?:"
+
+nfpms:
+  - package_name: proxmox-cli
+    formats: [deb, rpm, apk]
+    maintainer: Adarssh Athithan <adarssh1468@gmail.com>
+    homepage: https://github.com/Adz-ai/proxmox-cli
+    description: Command-line interface and k9s-style TUI for Proxmox VE.
+    license: MIT
+    bindir: /usr/bin
+
+homebrew_casks:
+  - repository:
+      owner: Adz-ai
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/Adz-ai/proxmox-cli
+    description: Command-line interface and k9s-style TUI for Proxmox VE.
+    license: MIT
+    # Publish the cask only when the tap token secret is configured.
+    skip_upload: '{{ if .Env.HOMEBREW_TAP_GITHUB_TOKEN }}false{{ else }}true{{ end }}'
+    caveats: |
+      Shell completions can be generated with:
+        proxmox-cli completion bash|zsh|fish
+
+release:
+  footer: |
+    **Full changelog**: https://github.com/Adz-ai/proxmox-cli/compare/{{ .PreviousTag }}...{{ .Tag }}

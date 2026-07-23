@@ -1,6 +1,13 @@
 # Proxmox CLI
 
-A powerful command-line interface for managing Proxmox Virtual Environment (PVE) resources. Control your virtualization infrastructure from the terminal with ease!
+[![CI](https://github.com/Adz-ai/proxmox-cli/actions/workflows/go.yml/badge.svg)](https://github.com/Adz-ai/proxmox-cli/actions/workflows/go.yml)
+[![Release](https://img.shields.io/github/v/release/Adz-ai/proxmox-cli)](https://github.com/Adz-ai/proxmox-cli/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Adz-ai/proxmox-cli)](https://goreportcard.com/report/github.com/Adz-ai/proxmox-cli)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+A command-line interface and k9s-style terminal UI for managing Proxmox Virtual Environment (PVE). Manage VMs, containers, snapshots, backups, and consoles from the terminal, across multiple clusters.
+
+![proxmox-cli TUI](docs/tui.svg)
 
 ## Features
 
@@ -24,19 +31,35 @@ A powerful command-line interface for managing Proxmox Virtual Environment (PVE)
 
 ### Installation
 
+Homebrew (macOS and Linux):
+
 ```bash
-# Clone the repository
+brew install adz-ai/tap/proxmox-cli
+```
+
+Released binaries for Linux, macOS, and Windows (plus `.deb`, `.rpm`, and
+`.apk` packages) are on the [releases page](https://github.com/Adz-ai/proxmox-cli/releases/latest):
+
+```bash
+# Example: Linux amd64
+curl -LO https://github.com/Adz-ai/proxmox-cli/releases/latest/download/checksums.txt
+curl -LO "https://github.com/Adz-ai/proxmox-cli/releases/latest/download/proxmox-cli_<version>_linux_amd64.tar.gz"
+tar -xzf proxmox-cli_*_linux_amd64.tar.gz proxmox-cli
+sudo install proxmox-cli /usr/local/bin/
+```
+
+With Go:
+
+```bash
+go install github.com/Adz-ai/proxmox-cli@latest
+```
+
+Or build from source:
+
+```bash
 git clone https://github.com/Adz-ai/proxmox-cli.git
 cd proxmox-cli
-
-# Build the CLI
-go build -o proxmox-cli main.go
-
-# Or install directly
-go install github.com/Adz-ai/proxmox-cli@latest
-
-# Optional: Move to PATH
-sudo mv proxmox-cli /usr/local/bin/
+make build   # builds to build/proxmox-cli
 ```
 
 ### First Time Setup
@@ -428,25 +451,12 @@ proxmox-cli/
 
 ## Contributing
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with tests
-4. Run the test suite (`go test ./...`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-### Development Guidelines
-- All new features should include BDD tests
-- Follow existing code patterns and conventions
-- Update documentation for new functionality
-- Ensure all tests pass before submitting
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+development setup, the checks a change must pass, and how releases work.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
@@ -454,7 +464,7 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 - Uses [go-proxmox](https://github.com/luthermonson/go-proxmox) for Proxmox API
 - Testing with [Godog](https://github.com/cucumber/godog) for BDD
 - Mocking with [GoMock](https://github.com/uber-go/mock) for reliable tests
-- Inspired by the need for better Proxmox CLI tools
+- TUI built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), styled after [k9s](https://github.com/derailed/k9s)
 
 ## Support
 

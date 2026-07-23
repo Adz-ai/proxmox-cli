@@ -43,7 +43,19 @@ Get started:
 			utility.SetActiveContextOverride(contextName)
 			return utility.LoadConfig()
 		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			launch, err := cmd.Flags().GetBool("tui")
+			if err != nil {
+				return err
+			}
+			if launch {
+				return launchTUI(cmd, defaultTUIRefresh)
+			}
+			return cmd.Help()
+		},
 	}
+
+	cmd.Flags().Bool("tui", false, "Launch the interactive terminal UI (shorthand for 'proxmox-cli tui')")
 
 	cmd.PersistentFlags().Duration("timeout", utility.DefaultTaskTimeout, "Maximum time to wait for a Proxmox task to complete")
 	cmd.PersistentFlags().String("context", "", "Configuration context to use for this invocation")
@@ -57,6 +69,7 @@ Get started:
 
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newStatusCmd())
+	cmd.AddCommand(newTUICmd())
 	cmd.AddCommand(newResourcesCmd())
 	cmd.AddCommand(newContextCmd())
 	cmd.AddCommand(nodes.NewCmd())

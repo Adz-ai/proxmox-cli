@@ -5,6 +5,7 @@ A powerful command-line interface for managing Proxmox Virtual Environment (PVE)
 ## Features
 
 - **Secure Authentication**: Password or API token auth with verified TLS by default
+- **Interactive TUI**: A k9s-style terminal UI (`proxmox-cli tui`) with live views and guest actions
 - **Scriptable**: JSON output (`-o json`) on all read commands
 - **Virtual Machine Management**: Create, list, describe, start, stop, restart, and delete VMs
 - **LXC Container Support**: Full container lifecycle plus snapshot create and list
@@ -114,6 +115,29 @@ proxmox-cli get --type vm           # Only VMs (also: lxc, storage)
 proxmox-cli get -n <node>           # Only resources on one node
 proxmox-cli get --status running    # Only running guests
 ```
+
+### Interactive TUI
+```bash
+proxmox-cli tui                     # k9s-style terminal UI (or: proxmox-cli --tui)
+proxmox-cli tui --refresh 10s       # Slower auto-refresh (default 5s)
+```
+
+The TUI shows live-refreshing views of guests, nodes, and storage:
+
+| Key | Action |
+|-----|--------|
+| `1` / `2` / `3`, `tab` | Switch between guests, nodes, and storage views |
+| `j`/`k`, arrows, `g`/`G`, page keys | Move the selection |
+| `/` | Filter rows (`esc` clears) |
+| `enter` | Details for the selected row |
+| `s` / `d` / `x` / `r` | Start / shutdown / stop / reboot the selected guest |
+| `R` | Refresh immediately |
+| `?` | Keyboard reference |
+| `q` | Quit |
+
+Destructive actions (shutdown, stop, reboot) ask for confirmation inside the
+UI before any API call is made. Templates and non-guest rows are protected
+from lifecycle actions.
 
 ### Virtual Machine Management
 ```bash
